@@ -35,19 +35,24 @@ export function turnkeyFor(c, { company, cbr }, now = new Date()) {
   return { turnkey: Math.round(r.total), breakdown: { scheme: s.name, engine: engineType(c), route: r.route, lines: r.lines, customs: { duty: duty.duty, fee: duty.fee, util: duty.util, excise: duty.excise, vat: duty.vat } } };
 }
 
+// Свыше 160 л.с. в каталоге только премиум-сегмент: под ключ от 5 млн ₽. Пикапы остаются.
+export const isHiddenByPower = (c, turnkey) => c.country !== 'kg' && c.hp > 160 && !isPickup(c) && !(turnkey >= THRESHOLD);
+
 export function recomputeTurnkey(db) {
   const rates = db.prepare('SELECT * FROM rates').all(), eff = Object.fromEntries(db.prepare('SELECT * FROM effective').all().map(r => [r.key, r.per_unit]));
   const cbr = Object.fromEntries(rates.map(r => [r.code, r.value / r.nominal]));
   if (!cbr.EUR || !eff.KRW) return null;
   const company = { USD: eff.USD, CNY: eff.CNY, JPY: eff.JPY, KRW: eff.KRW };
   const rows = db.prepare(`SELECT id,country,brand,model,trim,year,fuel,volume_cc,hp,body,price,currency,price_kind,chassis FROM listings WHERE active=1 AND source<>'kyrgyz'`).all();
-  const up = db.prepare('UPDATE listings SET turnkey=?, breakdown=?, turnkey_note=? WHERE id=?'), stat = { ok: 0 };
+  const up = db.prepare('UPDATE listings SET turnkey=?, breakdown=?, turnkey_note=?, hidden=? WHERE id=?'), stat = { ok: 0, hidden: 0 };
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const c of rows) {
       const x = turnkeyFor(c, { company, cbr });
       if (x.turnkey) stat.ok++; else stat[x.note] = (stat[x.note] || 0) + 1;
-      up.run(x.turnkey ?? null, x.breakdown ? JSON.stringify(x.breakdown) : null, x.note ?? null, c.id);
+      const hide = c.price_kind === 'start' || isHiddenByPower(c, x.turnkey) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
+      stat.hidden += hide;
+      up.run(x.turnkey ?? null, x.breakdown ? JSON.stringify(x.breakdown) : null, x.note ?? null, hide, c.id);
     }
     db.exec('COMMIT');
   } catch (e) { db.exec('ROLLBACK'); throw e; }

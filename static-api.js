@@ -1,5 +1,6 @@
 // Заменяет серверный API на GitHub Pages: данные лежат в JSON, фильтры считаются в браузере.
 import { turnkeyFor } from './turnkey.js';
+import { buildOffers, offerDetail, generationOf, OFFER_SORT } from './offers.js';
 
 const j = async p => { const r = await fetch(p, { cache: 'no-cache' }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); };
 let metaP, changesP; const chunks = new Map();
@@ -32,9 +33,22 @@ async function withBreakdown(c) {
   return c;
 }
 
+const genFilter = (list, gen) => (gen ? list.filter(c => generationOf(c).key === gen) : list);
+
 export async function staticApi(path) {
   const u = new URL(path, 'https://x.local'), q = u.searchParams, p = u.pathname;
   if (p === '/api/meta') return meta();
+  if (p === '/api/offers') {
+    const size = [50, 100, 200].includes(+q.get('size')) ? +q.get('size') : 50, page = Math.max(1, +q.get('page') || 1), rows = genFilter((await cars(q.get('country'))).filter(matcher(q)), q.get('gen'));
+    const list = buildOffers(rows).sort(OFFER_SORT[q.get('sort')] || OFFER_SORT.new);
+    return { total: list.length, cars: rows.length, page, size, items: list.slice((page - 1) * size, page * size) };
+  }
+  if (p === '/api/offer') {
+    const key = q.get('key') || '', [country, brand, model] = key.split('|'), s = new URLSearchParams(q); s.delete('key'); s.set('brand', brand); s.set('model', model);
+    const rows = (await cars(country)).filter(matcher(s)), d = offerDetail(rows, key);
+    if (d) for (const t of d.trims) await Promise.all(t.cars.map(withBreakdown));
+    return d;
+  }
   if (p === '/api/listings') {
     const size = [50, 100, 200].includes(+q.get('size')) ? +q.get('size') : 50, page = Math.max(1, +q.get('page') || 1), test = matcher(q);
     const list = (await cars(q.get('country'))).filter(test), sort = SORT[q.get('sort')];
@@ -44,7 +58,9 @@ export async function staticApi(path) {
   }
   if (p === '/api/facets') {
     const all = await cars(q.get('country')), base = all.filter(matcher(q, ['brand', 'model']));
-    return { brands: facet(base, 'brand'), models: q.get('brand') ? facet(base.filter(c => c.brand === q.get('brand')), 'model') : [] };
+    let gens = [];
+    if (q.get('brand') && q.get('model')) { const m = new Map(); for (const c of base) if (c.brand === q.get('brand') && c.model === q.get('model')) { const g = generationOf(c); if (g.key) m.set(g.key, { v: g.key, label: g.label, n: (m.get(g.key)?.n || 0) + 1 }); } gens = [...m.values()].sort((a, b) => b.n - a.n); }
+    return { brands: facet(base, 'brand'), models: q.get('brand') ? facet(base.filter(c => c.brand === q.get('brand')), 'model') : [], gens };
   }
   if (p === '/api/changes') {
     const all = await (changesP ||= j('data/changes.json')), type = q.get('type'), list = type ? all.filter(c => c.type === type) : all, size = 50, page = Math.max(1, +q.get('page') || 1);
