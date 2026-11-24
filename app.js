@@ -128,7 +128,7 @@ function renderCars() {
     <div class="c2 pair"><input class="input" name="kmMin" inputmode="numeric" placeholder="Пробег от, км"><input class="input" name="kmMax" inputmode="numeric" placeholder="до"></div>
     <div class="c2" id="w-gear"></div><div class="c2" id="w-fuel"></div><div class="c2" id="w-drive"></div>
     <div class="c2 pair dd-pair"><div id="w-ccmin"></div><div id="w-ccmax"></div></div><div class="c2" id="w-body"></div><div class="c2" id="w-steer"></div>
-    <div class="c2" id="w-dmg"></div><div class="c2" id="w-origin"></div><div class="c2"><input class="input" name="q" placeholder="Поиск"></div>
+    <div class="c3" id="w-origin"></div><div class="c3"><input class="input" name="q" placeholder="Поиск"></div>
     <div class="f-foot"><button type="button" class="reset" id="reset">× Сбросить все</button><button type="submit" class="btn main" id="show">Показать</button></div>
   </form>
   <div class="bar" id="bar"><div class="bar-l"><div class="count" id="count">&nbsp;</div><div class="view-seg" id="view-seg"><button type="button" data-m="models">Модели</button><button type="button" data-m="cars">Объявления</button></div></div><div class="sort" id="w-sort"></div></div>
@@ -170,7 +170,6 @@ function drawControls(f) {
   $('#w-body').innerHTML = ddHtml('dd-body', bodies.length ? bodies.map(b => BODIES[b]).join(', ') : 'Тип кузова', !bodies.length, false);
   $('#dd-body').addEventListener('click', e => openBodyPicker(e.currentTarget, v => { filters.body = v; filters.page = 1; loadCars(); }));
   simple('#w-steer', 'steer', 'Руль', STEER_OPTIONS, 'Любой руль');
-  simple('#w-dmg', 'dmg', 'Состояние', DAMAGE_OPTIONS, 'Любое состояние');
   const origins = filters.origin.split(',').filter(Boolean);
   set('#w-origin', 'dd-origin', origins.length ? origins.map(o => ORIGIN_OPTIONS.find(x => x.value === o)?.label).join(', ') : 'Страна марки', !origins.length, false, [{ value: '', label: 'Любая' }, ...ORIGIN_OPTIONS], filters.origin, false, v => { filters.origin = v; filters.page = 1; loadCars(); }, true);
   set('#w-sort', 'dd-sort', SORT.find(s => s.value === filters.sort).label, false, false, SORT, filters.sort, false, v => { filters.sort = v; filters.page = 1; loadCars(); });
