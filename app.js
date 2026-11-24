@@ -24,7 +24,8 @@ const BODIES = { sedan: 'Седан', hatch5: 'Хэтчбек 5 дв.', hatch3: 
 const STEER = { left: 'Левый', right: 'Правый' };
 const GEAR = { at: 'АКПП', robot: 'Робот', cvt: 'Вариатор', mt: 'Механика' };
 const IN_COUNTRY = { cn: 'цена в Китае, без доставки и таможни', kr: 'цена в Корее, без доставки и таможни', jp: 'цена на аукционе, без доставки', ae: 'цена в Эмиратах, без доставки', kg: 'цена в Киргизии' };
-const calcState = { id: 'kr', price: null, rate: null, abroad: null, year: new Date().getFullYear() - 4, cc: 1600, hp: 150, fuel: 'petrol', body: 'car', customs: null, docs: null, commission: null, logistics: null, payMarkup: 'none', customsTouched: false, commissionTouched: false, title: '' };
+// Пустой калькулятор ничего не подставляет: менеджер вводит всё сам или открывает машину из каталога.
+const calcState = { id: '', price: null, rate: null, abroad: null, year: null, cc: null, hp: null, fuel: '', body: 'car', customs: null, docs: null, commission: null, logistics: null, payMarkup: 'none', customsTouched: false, commissionTouched: false, title: '' };
 
 /* Всплывающие списки */
 function openPop(btn, { width = 220, cls = '', html, bind }) {
@@ -348,14 +349,18 @@ function fillCalc(c) {
   const id = c.country === 'jp' ? japanScheme(c) : { cn: 'cn', kr: 'kr', ae: 'ae' }[c.country], s = scheme(id);
   let saved = {}; try { saved = JSON.parse(c.breakdown || '{}'); } catch { saved = {}; }
   const carPrice = c.currency === s.cur ? c.price : c.price * meta.rates[c.currency].cbr / meta.rates[s.cur].cbr;
-  Object.assign(calcState, { id, price: Math.round(carPrice), rate: null, abroad: null, year: c.year || calcState.year, cc: c.volume_cc ?? null, hp: c.hp ?? null, fuel: saved.engine || c.fuel || (/\b\d{3}d\b|\bdiesel\b|\bTDI\b|\bCDI\b|\bXD\b/i.test(c.trim || '') ? 'diesel' : 'petrol'), body: c.body === 'pickup' || c.turnkey_note === 'pickup' ? 'pickup' : 'car', customs: null, docs: null, commission: null, logistics: null, customsTouched: false, commissionTouched: false, title: c.title });
+  Object.assign(calcState, { id, price: Math.round(carPrice), rate: null, abroad: null, year: c.year || null, cc: c.volume_cc ?? null, hp: c.hp ?? null, fuel: saved.engine || c.fuel || (/\b\d{3}d\b|\bdiesel\b|\bTDI\b|\bCDI\b|\bXD\b/i.test(c.trim || '') ? 'diesel' : 'petrol'), body: c.body === 'pickup' || c.turnkey_note === 'pickup' ? 'pickup' : 'car', customs: null, docs: null, commission: null, logistics: null, customsTouched: false, commissionTouched: false, title: c.title });
 }
-function schemeReset(id) { const s = scheme(id); Object.assign(calcState, { id, price: s.price, rate: null, abroad: null, customs: null, docs: null, commission: null, logistics: null, customsTouched: false, commissionTouched: false, payMarkup: 'none', title: '' }); }
-const REASONS = { pickup: 'Пикап', specs: 'Нужны объём и мощность', price: 'Нужна цена' };
+function schemeReset(id) { Object.assign(calcState, { id, price: null, rate: null, abroad: null, customs: null, docs: null, commission: null, logistics: null, customsTouched: false, commissionTouched: false, payMarkup: 'none', title: '' }); }
+const REASONS = { pickup: 'Пикап', specs: 'Нужны объём и мощность', price: 'Нужна цена', input: 'Нужны год и топливо' };
 
 function renderCalc() {
   const st = calcState;
-  if (st.price == null) st.price = scheme(st.id).price;
+  if (!scheme(st.id)) {
+    view.innerHTML = `<h1>Калькулятор</h1><div class="calc"><section class="box"><div class="fields"><div class="field full"><span>Направление</span>${ddHtml('dd-scheme', 'Выберите направление', true)}</div></div></section><section class="box result"><h3>Расчёт</h3><div class="empty">Выберите направление</div></section></div>`;
+    $('#dd-scheme').addEventListener('click', e => openDropdown(e.currentTarget, { options: SCHEMES.map(x => ({ value: x.id, label: x.name })), value: '', onPick: v => { schemeReset(v); renderCalc(); } }));
+    return;
+  }
   const s = scheme(st.id);
   const field = (k, label, ph) => `<label class="field"><span>${label}</span><input class="input" data-k="${k}" inputmode="decimal" value="${st[k] == null ? '' : esc(String(st[k]).replace('.', ','))}" placeholder="${ph ?? ''}"></label>`;
   view.innerHTML = `<h1>Калькулятор</h1><div class="calc"><section class="box">
@@ -367,7 +372,7 @@ function renderCalc() {
       ${s.payMarkup ? `<div class="field"><span>Оплата</span>${ddHtml('dd-pay', PAY_MARKUPS.find(m => m.id === st.payMarkup).label)}</div>` : ''}
       <div class="sep">Таможня</div>
       <div class="field full"><span>Кузов</span><div class="seg" data-seg="body"><button type="button" data-v="car">Легковой</button><button type="button" data-v="pickup">Пикап</button></div></div>
-      ${field('year', 'Год выпуска')}<div class="field"><span>Топливо</span>${ddHtml('dd-cfuel', FUEL[st.fuel])}</div>
+      ${field('year', 'Год выпуска')}<div class="field"><span>Топливо</span>${ddHtml('dd-cfuel', FUEL[st.fuel] || 'Выберите', !st.fuel)}</div>
       ${field('cc', 'Объём, см³')}${field('hp', 'Мощность, л.с.')}
       ${field('customs', 'Таможенные платежи, ₽')}<div class="field" id="c-note"></div>
       <div class="links"><a class="btn sec" target="_blank" rel="noopener noreferrer" href="https://calcus.ru/rastamozhka-auto">Calcus</a><a class="btn sec" target="_blank" rel="noopener noreferrer" href="https://www.tks.ru/auto/calc/">TKS, пикап</a></div>
@@ -394,15 +399,16 @@ function drawCalc() {
   if (!out) return;
   const rate = st.rate ?? unitRate(s.cur);
   const carRub = (st.price || 0) * rate;
-  const auto = customs({ priceRub: (st.price || 0) * (meta.rates[s.cur]?.cbr || rate), eurRate: unitRate('EUR'), age: ageBand(st.year || new Date().getFullYear()), cc: st.cc, hp: st.hp, fuel: st.fuel, body: st.body });
+  const auto = !st.year || !st.fuel ? { ok: false, reason: 'input' } : customs({ priceRub: (st.price || 0) * (meta.rates[s.cur]?.cbr || rate), eurRate: unitRate('EUR'), age: ageBand(st.year), cc: st.cc, hp: st.hp, fuel: st.fuel, body: st.body });
   const custInput = $('[data-k=customs]');
   if (!st.customsTouched) { st.customs = auto.ok ? Math.round(auto.total) : null; if (document.activeElement !== custInput) custInput.value = st.customs == null ? '' : st.customs; }
   $('#c-note').innerHTML = auto.ok ? `<span>Расчёт</span><div class="state"><span class="badge ok">${auto.util <= 5200 ? 'Льготный утильсбор' : 'По ставкам 2026'}</span></div>` : `<span>Расчёт</span><div class="state"><span class="badge warn">${esc(REASONS[auto.reason])}: вручную</span></div>`;
   const ruleBase = { price: st.price || 0, rate, abroad: st.abroad ?? undefined, customs: st.customs ?? 0, docs: st.docs ?? undefined, logistics: st.logistics ?? 0, broker: st.broker ?? undefined, payMarkup: st.payMarkup };
   const commission = st.commissionTouched ? st.commission : (s.commission ?? commissionFor(compute(st.id, { ...ruleBase, commission: 60000 }).total));
   const commInput = $('[data-k=commission]');
-  if (!st.commissionTouched && document.activeElement !== commInput) commInput.value = commission;
-  if (st.customs == null || !(st.price > 0) || !(rate > 0)) { out.innerHTML = `<h3>Расчёт</h3><div class="empty">Введите таможенные платежи</div>`; return; }
+  if (!st.commissionTouched) commInput.placeholder = fmt(commission);
+  const missing = !(st.price > 0) ? 'Введите цену авто' : !(rate > 0) ? 'Введите курс' : st.customs == null ? 'Заполните год, топливо, объём и мощность или таможенные платежи' : '';
+  if (missing) { out.innerHTML = `<h3>Расчёт</h3><div class="empty">${missing}</div>`; return; }
   const r = compute(st.id, { price: st.price, rate, abroad: st.abroad ?? undefined, customs: st.customs, docs: st.docs ?? undefined, commission, logistics: st.logistics ?? 0, broker: st.broker ?? undefined, payMarkup: st.payMarkup });
   const line = l => `<div class="line ${l.strong ? 'strong' : ''}"><span>${esc(l.label)}</span><span>${money(l.value, l.cur)}</span></div>`;
   out.innerHTML = `<div class="total"><span>${esc(r.totalLabel)}</span><b>${money(r.total)}</b></div>${r.route ? `<div class="line"><span>Маршрут</span><span>${esc(r.route)}</span></div>` : ''}<div class="lines">${r.lines.map(line).join('')}</div>
