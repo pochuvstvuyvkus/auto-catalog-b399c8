@@ -33,3 +33,40 @@ main{padding-block:24px 56px}h1{font-size:32px;line-height:1.15;font-weight:700;
 @media(max-width:760px){.top-in{height:auto;display:block;padding-block:10px 8px}.logo{margin-bottom:8px}.logo img{height:30px}.nav{gap:2px}.nav a{flex:1 1 0;justify-content:center;height:34px;padding:0 4px;font-size:13px}.progress{top:0}main{padding-block:16px 40px}h1{font-size:25px}.filters{grid-template-columns:repeat(2,minmax(0,1fr));padding:14px}.c2,.c3{grid-column:span 2}.c2.half{grid-column:span 1}.c1{grid-column:span 1}.offer-body{padding:0 16px 20px}.bar-l{justify-content:space-between}.trim-h{gap:9px}.range{font-size:16px}.f-foot{flex-direction:column-reverse;align-items:stretch;gap:2px}.f-foot .btn{min-width:0;width:100%}.reset{justify-content:center}.cond{padding:0 4px}.bar{align-items:stretch;flex-direction:column}.sort{width:100%}.row{grid-template-columns:minmax(0,1fr);gap:10px;padding:14px 0}.ph{aspect-ratio:16/10}.r-side{display:block}.where{padding-top:6px}.nums .pg[data-num],.nums .dots{display:none}.pg-m{display:inline}.modal-back{align-items:flex-end;padding:0}.modal{max-height:94dvh;border-radius:22px 22px 0 0}.m-head{padding:16px}.m-body{grid-template-columns:minmax(0,1fr);gap:16px;padding:0 16px 20px}.src-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ch{grid-template-columns:minmax(0,1fr);gap:6px;padding:12px 14px}.ch .p{text-align:left;white-space:normal}.cond{gap:18px}.cond button{font-size:15px}.dd-pop{left:0!important;right:0;top:auto!important;bottom:0!important;width:100%!important;max-height:72dvh!important;border-radius:20px 20px 0 0}.dd-back{display:block;position:fixed;inset:0;z-index:69;background:rgba(3,3,5,.66)}.dd-opt{padding:12px}}
 @media(max-width:400px){.fields{grid-template-columns:minmax(0,1fr)}.total b{font-size:26px}.row .rub{font-size:19px}}
 @media(min-width:1900px){.wrap{max-width:1440px}.layout{grid-template-columns:minmax(0,1fr) 300px}}
+
+/* Фильтры: списки с подпунктами и галочками, кузова и поколения плиткой */
+.dd-pair{background:var(--field)}
+.dd-pair .dd-btn{background:transparent}
+.dd-opt.sub{padding-left:26px}
+.dd-opt.chk span{display:flex;align-items:center;gap:10px}
+.dd-opt.chk span::before{content:"";flex:none;width:16px;height:16px;border-radius:5px;border:1.5px solid var(--muted)}
+.dd-opt.chk.on{font-weight:500}
+.dd-opt.chk.on span::before{border-color:var(--accent);background:var(--accent) center/11px no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2 5 8.5l4.5-5'/%3E%3C/svg%3E")}
+.grid-pop{overflow-y:auto;padding:8px}
+.pop-clear{display:flex;align-items:center;gap:8px;width:100%;height:40px;padding:0 10px;border-radius:9px;color:var(--muted);text-align:left;border-bottom:1px solid var(--line);margin-bottom:8px}
+.body-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+.body-opt{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px 10px;border-radius:12px;color:var(--text-2);font-size:12.5px;text-align:center;line-height:1.2}
+.body-opt svg{width:68px;height:34px;color:var(--muted)}
+.body-opt.on{background:var(--field-h);color:#fff}
+.body-opt.on svg{color:var(--accent)}
+.gen-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.gen-opt{position:relative;display:block;aspect-ratio:4/3;border-radius:12px;overflow:hidden;background:var(--field);text-align:left;border:2px solid transparent}
+.gen-opt img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.gen-opt::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.78) 0,rgba(0,0,0,.25) 45%,rgba(0,0,0,0) 70%)}
+.gen-t{position:absolute;left:12px;right:12px;top:10px;z-index:1;color:#fff}
+.gen-t b{display:block;font-size:14px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+.gen-t small{display:block;margin-top:2px;font-size:12px;color:rgba(255,255,255,.8)}
+.gen-opt.on{border-color:var(--accent)}
+/* Галерея в карточке машины */
+.gal .ph{position:relative}
+.gal-nav{position:absolute;top:50%;transform:translateY(-50%);width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:22px;line-height:1}
+.gal-nav.prev{left:8px}.gal-nav.next{right:8px}
+.gal-n{position:absolute;right:8px;bottom:8px;padding:2px 8px;border-radius:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px}
+.thumbs{display:flex;gap:6px;margin-top:8px;overflow-x:auto;scrollbar-width:none}
+.thumbs::-webkit-scrollbar{display:none}
+.thumb{flex:none;width:72px;aspect-ratio:4/3;border-radius:8px;overflow:hidden;background:var(--field);border:2px solid transparent;opacity:.7}
+.thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.thumb.on{border-color:var(--accent);opacity:1}
+@media(hover:hover){.body-opt:not(.on):hover,.pop-clear:hover{background:var(--field)}.gen-opt:not(.on):hover{border-color:var(--field-h)}.gal-nav:hover{background:rgba(0,0,0,.8)}.thumb:hover{opacity:1}}
+@media(max-width:760px){.body-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.gen-grid{grid-template-columns:minmax(0,1fr)}.grid-pop{max-height:80dvh!important}}
+@media(max-width:400px){.body-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}

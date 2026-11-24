@@ -2,6 +2,7 @@ import { SCHEMES, PAY_MARKUPS, scheme, compute, defaultAbroad, commissionFor } f
 import { customs, ageBand } from './customs.js';
 import { isSanctioned, isMildHybrid, japanScheme } from './sanctions.js';
 import { bandOf } from './offers.js';
+import { GEAR_OPTIONS, DRIVE_OPTIONS, STEER_OPTIONS, DAMAGE_OPTIONS, ORIGIN_OPTIONS, VOLUMES } from './filter.js';
 import { staticApi as api } from './static-api.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -17,49 +18,101 @@ const FUEL = { petrol: 'Бензин', diesel: 'Дизель', hybrid: 'Гибр
 
 let meta = null;
 const cache = new Map();
-const filters = { mode: 'models', gen: '', country: '', cond: '', ins: '', brand: '', model: '', fuel: '', priceMin: '', priceMax: '', yearMin: '', yearMax: '', kmMax: '', volMin: '', volMax: '', ccMin: '', ccMax: '', q: '', sort: 'new', page: 1, size: 50 };
+const BLANK = { gen: '', brand: '', model: '', fuel: '', priceMin: '', priceMax: '', yearMin: '', yearMax: '', kmMin: '', kmMax: '', ccMin: '', ccMax: '', gear: '', drive: '', steer: '', dmg: '', body: '', origin: '', q: '' };
+const filters = { mode: 'models', country: '', cond: '', ...BLANK, sort: 'new', page: 1, size: 50 };
+const BODIES = { sedan: 'Седан', hatch5: 'Хэтчбек 5 дв.', hatch3: 'Хэтчбек 3 дв.', liftback: 'Лифтбек', suv5: 'Джип 5 дв.', suv3: 'Джип 3 дв.', wagon: 'Универсал', minivan: 'Минивэн', pickup: 'Пикап', coupe: 'Купе', cabrio: 'Открытый' };
+const STEER = { left: 'Левый', right: 'Правый' };
+const GEAR = { at: 'АКПП', robot: 'Робот', cvt: 'Вариатор', mt: 'Механика' };
+const IN_COUNTRY = { cn: 'цена в Китае, без доставки и таможни', kr: 'цена в Корее, без доставки и таможни', jp: 'цена на аукционе, без доставки', ae: 'цена в Эмиратах, без доставки', kg: 'цена в Киргизии' };
 const calcState = { id: 'kr', price: null, rate: null, abroad: null, year: new Date().getFullYear() - 4, cc: 1600, hp: 150, fuel: 'petrol', body: 'car', customs: null, docs: null, commission: null, logistics: null, payMarkup: 'none', customsTouched: false, commissionTouched: false, title: '' };
 
-/* Выпадающий список */
-function openDropdown(btn, { options, value, search, onPick }) {
+/* Всплывающие списки */
+function openPop(btn, { width = 220, cls = '', html, bind }) {
   closeDropdown();
   const r = btn.getBoundingClientRect();
   const back = document.createElement('div'); back.className = 'dd-back';
-  const pop = document.createElement('div'); pop.className = 'dd-pop';
-  pop.style.left = `${r.left}px`; pop.style.width = `${Math.max(r.width, 220)}px`;
-  const below = innerHeight - r.bottom;
-  if (below > 240 || below > r.top) { pop.style.top = `${r.bottom + 4}px`; pop.style.maxHeight = `${Math.min(340, below - 12)}px`; }
-  else { pop.style.bottom = `${innerHeight - r.top + 4}px`; pop.style.maxHeight = `${Math.min(340, r.top - 12)}px`; }
-  pop.innerHTML = `${search ? '<div class="dd-search"><input class="input" placeholder="Поиск" autocomplete="off"></div>' : ''}<div class="dd-list"></div>`;
-  const list = $('.dd-list', pop);
-  const draw = q => {
-    const l = options.filter(o => !q || o.label.toLowerCase().includes(q));
-    list.innerHTML = l.map(o => `<button type="button" class="dd-opt ${o.value === value ? 'on' : ''}" data-v="${esc(o.value)}"><span>${esc(o.label)}</span>${o.n != null ? `<small>${fmt(o.n)}</small>` : ''}</button>`).join('') || '<div class="dd-none">Ничего нет</div>';
-  };
-  draw('');
-  list.addEventListener('click', e => { const b = e.target.closest('.dd-opt'); if (b) { closeDropdown(); onPick(b.dataset.v); } });
+  const pop = document.createElement('div'); pop.className = `dd-pop ${cls}`;
+  const w = Math.min(Math.max(r.width, width), innerWidth - 24);
+  pop.style.left = `${Math.max(12, Math.min(r.left, innerWidth - w - 12))}px`; pop.style.width = `${w}px`;
+  const below = innerHeight - r.bottom, cap = cls ? 560 : 340;
+  if (below > 300 || below > r.top) { pop.style.top = `${r.bottom + 4}px`; pop.style.maxHeight = `${Math.min(cap, below - 12)}px`; }
+  else { pop.style.bottom = `${innerHeight - r.top + 4}px`; pop.style.maxHeight = `${Math.min(cap, r.top - 12)}px`; }
+  pop.innerHTML = html;
   back.addEventListener('click', closeDropdown);
   document.body.append(back, pop);
-  if (search) { const i = $('input', pop); i.addEventListener('input', () => draw(i.value.trim().toLowerCase())); if (matchMedia('(hover:hover)').matches) i.focus(); }
+  bind(pop);
   openDropdown.el = [back, pop];
   setTimeout(() => document.addEventListener('mousedown', outside), 0);
+  return pop;
 }
-function outside(e) { if (openDropdown.el && !openDropdown.el[1].contains(e.target)) closeDropdown(); }
+function openDropdown(btn, { options, value, search, onPick, multi }) {
+  const picked = new Set(multi ? String(value || '').split(',').filter(Boolean) : []);
+  openPop(btn, { html: `${search ? '<div class="dd-search"><input class="input" placeholder="Поиск" autocomplete="off"></div>' : ''}<div class="dd-list"></div>`, bind: pop => {
+    const list = $('.dd-list', pop);
+    const draw = q => {
+      const l = options.filter(o => !q || o.label.toLowerCase().includes(q));
+      list.innerHTML = l.map(o => { const on = multi ? (o.value ? picked.has(o.value) : !picked.size) : o.value === value; return `<button type="button" class="dd-opt ${on ? 'on' : ''} ${o.sub ? 'sub' : ''} ${multi && o.value ? 'chk' : ''}" data-v="${esc(o.value)}"><span>${esc(o.label)}</span>${o.n != null ? `<small>${fmt(o.n)}</small>` : ''}</button>`; }).join('') || '<div class="dd-none">Ничего нет</div>';
+    };
+    draw('');
+    list.addEventListener('click', e => {
+      const b = e.target.closest('.dd-opt'); if (!b) return;
+      if (!multi) { closeDropdown(); onPick(b.dataset.v); return; }
+      const v = b.dataset.v; if (!v) picked.clear(); else picked.has(v) ? picked.delete(v) : picked.add(v);
+      draw(''); onPick([...picked].join(','));
+    });
+    if (search) { const i = $('input', pop); i.addEventListener('input', () => draw(i.value.trim().toLowerCase())); if (matchMedia('(hover:hover)').matches) i.focus(); }
+  } });
+}
+function outside(e) { if (openDropdown.el && !openDropdown.el[1].contains(e.target) && !e.target.closest?.('.dd-btn.open')) closeDropdown(); }
 function closeDropdown() { openDropdown.el?.forEach(x => x.remove()); openDropdown.el = null; document.removeEventListener('mousedown', outside); }
 const ddHtml = (id, label, empty, disabled) => `<button type="button" class="dd-btn ${empty ? 'blank' : ''}" id="${id}" ${disabled ? 'disabled' : ''}><span>${esc(label)}</span><i></i></button>`;
 
+// Силуэты кузовов для фильтра, как на Дроме.
+const W = '<circle cx="17" cy="25" r="4.2"/><circle cx="47" cy="25" r="4.2"/>';
+const BODY_ICON = {
+  sedan: `<path d="M3 23v-4.5c0-1.4 1-2.4 2.5-2.7L15 14l7-5.2c1-.7 2-1 3.2-1h11.6c1.3 0 2.4.4 3.3 1.2L46 14l11.6 1.6c2 .3 3.4 1.9 3.4 3.9V23M8 25H3M26 25H38M61 25h-9"/>${W}<path d="M21 14h25M33 8v6"/>`,
+  hatch5: `<path d="M3 23v-5.2c0-1.3.9-2.4 2.2-2.7L15 13l6.5-6c.9-.8 2.1-1.3 3.3-1.3H52c1.6 0 3 1 3.6 2.5L59 17c.6 1.3 1 2.8 1 4.2V23M8 25H3M26 25H38M60 25h-8"/>${W}<path d="M20 13h36M37 6v7"/>`,
+  hatch3: `<path d="M5 23v-5c0-1.2.8-2.3 2-2.6L17 13l7-6c.9-.8 2-1.2 3.2-1.2H48c1.6 0 3 1 3.6 2.5L56 17c.6 1.3.9 2.7.9 4V23M10 25H5M26 25H38M57 25h-5"/>${W}<path d="M22 13h33"/>`,
+  liftback: `<path d="M3 23v-4.6c0-1.4 1-2.5 2.4-2.8L15 14l7.5-5.6c1-.8 2.2-1.2 3.4-1.2h11c1.4 0 2.7.5 3.7 1.4L61 17.5V23M8 25H3M26 25H38M61 25h-9"/>${W}<path d="M21 14h27M34 7.5V14"/>`,
+  suv5: `<path d="M3 23v-6c0-1.4.9-2.6 2.3-2.9L13 12.5l5.5-7.3c.8-1 2-1.6 3.3-1.6H55c1.9 0 3.5 1.5 3.6 3.4L59.5 16c.5.8.5 1.8.5 2.8V23M8 25H3M26 25H38M60 25h-8"/>${W}<path d="M14 12.5h44M36 4v8.5M3 19h3"/>`,
+  suv3: `<path d="M6 23v-6c0-1.3.9-2.5 2.2-2.8L15 12.5l5-7.4c.7-1 1.9-1.6 3.1-1.6H53c1.9 0 3.4 1.5 3.5 3.4L57.5 16c.4.8.5 1.7.5 2.6V23M11 25H6M26 25H38M58 25h-6"/>${W}<path d="M16 12.5h40"/>`,
+  wagon: `<path d="M3 23v-4.8c0-1.4 1-2.5 2.4-2.8L15 13.5l6.5-6.2c.9-.8 2-1.3 3.2-1.3H57c1.5 0 2.8 1.1 3 2.6L61 16v7M8 25H3M26 25H38M61 25h-9"/>${W}<path d="M20 13.5h40M36 6v7.5"/>`,
+  minivan: `<path d="M3 23v-6.5c0-1.2.6-2.3 1.7-2.9L10 10.5l7-6c.9-.7 2-1.1 3.1-1.1H56c2 0 3.6 1.5 3.8 3.4L61 17v6M8 25H3M26 25H38M61 25h-9"/>${W}<path d="M11 10.5h49M25 3.4v7.1M40 3.4v7.1"/>`,
+  pickup: `<path d="M3 23v-6c0-1.2.8-2.3 2-2.7L13 12l5-7.2c.7-1 1.9-1.6 3.1-1.6H33c1.4 0 2.5 1.1 2.5 2.5V13H61v10M8 25H3M26 25H38M61 25h-9"/>${W}<path d="M14 12h21"/>`,
+  coupe: `<path d="M3 23v-4.2c0-1.4 1-2.5 2.4-2.8L17 14l8-5.4c1-.7 2.1-1 3.3-1H37c1.5 0 2.9.6 4 1.6L47 14l11 1.8c1.8.3 3 1.8 3 3.6V23M8 25H3M26 25H38M61 25h-9"/>${W}<path d="M23 14h24"/>`,
+  cabrio: `<path d="M3 23v-4.5c0-1.4 1-2.5 2.4-2.8L19 14l6-4M38 14h20c1.7 0 3 1.3 3 3v6M8 25H3M26 25H38M61 25h-9"/>${W}<path d="M19 14h19M44 7l-6 7"/>`,
+};
+const bodyIcon = k => `<svg viewBox="0 0 64 32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${BODY_ICON[k]}</svg>`;
+
+function openBodyPicker(btn, onPick) {
+  const picked = new Set(filters.body.split(',').filter(Boolean));
+  openPop(btn, { width: 520, cls: 'grid-pop', html: `<button type="button" class="pop-clear">× Любой кузов</button><div class="body-grid"></div>`, bind: pop => {
+    const grid = $('.body-grid', pop);
+    const draw = () => { grid.innerHTML = Object.entries(BODIES).map(([k, v]) => `<button type="button" class="body-opt ${picked.has(k) ? 'on' : ''}" data-v="${k}">${bodyIcon(k)}<span>${v}</span></button>`).join(''); };
+    draw();
+    grid.addEventListener('click', e => { const b = e.target.closest('.body-opt'); if (!b) return; const v = b.dataset.v; picked.has(v) ? picked.delete(v) : picked.add(v); draw(); onPick([...picked].join(',')); });
+    $('.pop-clear', pop).addEventListener('click', () => { picked.clear(); closeDropdown(); onPick(''); });
+  } });
+}
+
+function openGenPicker(btn, gens, onPick) {
+  openPop(btn, { width: 560, cls: 'grid-pop', html: `<button type="button" class="pop-clear">× Любое поколение</button><div class="gen-grid">${gens.map(g => `<button type="button" class="gen-opt ${g.v === filters.gen ? 'on' : ''}" data-v="${esc(g.v)}">${g.photo ? `<img loading="lazy" referrerpolicy="no-referrer" src="${safe(g.photo)}" alt="">` : ''}<span class="gen-t"><b>${esc(g.years)}${g.codes ? `, ${esc(g.codes)}` : ''}</b><small>${fmt(g.n)} ${word(g.n, 'машина', 'машины', 'машин')}</small></span></button>`).join('')}</div>`, bind: pop => {
+    pop.querySelectorAll('img').forEach(i => i.addEventListener('error', () => i.remove()));
+    $('.gen-grid', pop).addEventListener('click', e => { const b = e.target.closest('.gen-opt'); if (b) { closeDropdown(); onPick(b.dataset.v); } });
+    $('.pop-clear', pop).addEventListener('click', () => { closeDropdown(); onPick(''); });
+  } });
+}
+
 /* Автомобили */
-const qs = () => { const u = new URLSearchParams(); for (const [k, v] of Object.entries(filters)) if (v !== '' && v != null && !['volMin', 'volMax', 'mode'].includes(k)) u.set(k, v); return u.toString(); };
+const qs = () => { const u = new URLSearchParams(); for (const [k, v] of Object.entries(filters)) if (v !== '' && v != null && k !== 'mode') u.set(k, v); return u.toString(); };
 const SORT = [{ value: 'new', label: 'Сначала новые' }, { value: 'cheap', label: 'Сначала дешевле' }, { value: 'dear', label: 'Сначала дороже' }, { value: 'year', label: 'Год: новее' }, { value: 'km', label: 'Меньше пробег' }];
 const FROM = { cn: 'из Китая', kr: 'из Кореи', jp: 'из Японии', ae: 'из Эмиратов', kg: 'из Киргизии' };
 const ads = n => `${fmt(n)} ${word(n, 'объявление', 'объявления', 'объявлений')}`;
 const heading = () => `Автомобили${filters.country ? ` ${FROM[filters.country]}` : ''}`;
 
 function sideHtml() {
-  const rates = [['USD', 1], ['CNY', 1], ['JPY', 100], ['KRW', 1000], ['AED', 1], ['EUR', 1]];
-  const day = d => (!d ? '' : /^\d{2}\.\d{2}\.\d{4}$/.test(d) ? d.slice(0, 5) : new Date(d).toLocaleDateString('ru-RU').slice(0, 5));
-  return `<aside class="side"><section class="box"><h3>Курсы</h3>${rates.map(([c, m]) => `<div class="kv-row"><span>${m > 1 ? `${m} ` : ''}${c}${c === 'EUR' ? ' ЦБ' : ''} <small>${day(meta.rates[c]?.date)}</small></span><b>${fmt((meta.rates[c]?.perUnit ?? 0) * m, 2)} ₽</b></div>`).join('')}</section>
-  <section class="box"><h3>Источники</h3>${meta.sources.map(s => `<div class="kv-row"><span>${esc(s.name)}</span><b>${fmt(s.listings)}</b></div>`).join('')}</section></aside>`;
+  const rate = v => (+v).toLocaleString('ru-RU', { minimumFractionDigits: v < 1 ? 3 : 2, maximumFractionDigits: v < 1 ? 4 : 2 });
+  return `<aside class="side"><section class="box"><h3>Курсы</h3>${['CNY', 'JPY', 'KRW', 'USD'].map(c => `<div class="kv-row"><span>${c}</span><b>${rate(meta.rates[c]?.perUnit ?? 0)} ₽</b></div>`).join('')}</section></aside>`;
 }
 
 function renderCars() {
@@ -71,26 +124,22 @@ function renderCars() {
     <div class="c2" id="w-brand"></div><div class="c2" id="w-model"></div><div class="c2" id="w-gen"></div>
     <div class="c2 pair"><input class="input" name="priceMin" inputmode="numeric" placeholder="Цена от, ₽"><input class="input" name="priceMax" inputmode="numeric" placeholder="до"></div>
     <div class="c2 pair"><input class="input" name="yearMin" inputmode="numeric" placeholder="Год от"><input class="input" name="yearMax" inputmode="numeric" placeholder="до"></div>
-    <div class="c2 pair"><input class="input" name="volMin" inputmode="decimal" placeholder="Объём от, л"><input class="input" name="volMax" inputmode="decimal" placeholder="до"></div>
-    <div class="c2" id="w-fuel"></div><div class="c2" id="w-ins"></div>
-    <div class="c1"><input class="input" name="kmMax" inputmode="numeric" placeholder="Пробег до"></div><div class="c1"><input class="input" name="q" placeholder="Поиск"></div>
+    <div class="c2 pair"><input class="input" name="kmMin" inputmode="numeric" placeholder="Пробег от, км"><input class="input" name="kmMax" inputmode="numeric" placeholder="до"></div>
+    <div class="c2" id="w-gear"></div><div class="c2" id="w-fuel"></div><div class="c2" id="w-drive"></div>
+    <div class="c2 pair dd-pair"><div id="w-ccmin"></div><div id="w-ccmax"></div></div><div class="c2" id="w-body"></div><div class="c2" id="w-steer"></div>
+    <div class="c2" id="w-dmg"></div><div class="c2" id="w-origin"></div><div class="c2"><input class="input" name="q" placeholder="Поиск"></div>
     <div class="f-foot"><button type="button" class="reset" id="reset">× Сбросить все</button><button type="submit" class="btn main" id="show">Показать</button></div>
   </form>
   <div class="bar" id="bar"><div class="bar-l"><div class="count" id="count">&nbsp;</div><div class="view-seg" id="view-seg"><button type="button" data-m="models">Модели</button><button type="button" data-m="cars">Объявления</button></div></div><div class="sort" id="w-sort"></div></div>
   <div id="results"></div></div>${sideHtml()}</div>`;
-  for (const n of ['priceMin', 'priceMax', 'yearMin', 'yearMax', 'kmMax', 'q', 'volMin', 'volMax']) {
+  for (const n of ['priceMin', 'priceMax', 'yearMin', 'yearMax', 'kmMin', 'kmMax', 'q']) {
     const i = $(`[name=${n}]`); i.value = filters[n];
-    let t; i.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => {
-      filters[n] = n === 'q' ? i.value : (parseNum(i.value) ?? '');
-      if (n === 'volMin') filters.ccMin = filters.volMin === '' ? '' : Math.round(filters.volMin * 1000);
-      if (n === 'volMax') filters.ccMax = filters.volMax === '' ? '' : Math.round(filters.volMax * 1000);
-      filters.page = 1; loadCars();
-    }, 280); });
+    let t; i.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { filters[n] = n === 'q' ? i.value : (parseNum(i.value) ?? ''); filters.page = 1; loadCars(); }, 280); });
   }
   $('#ff').addEventListener('submit', e => { e.preventDefault(); $('#bar').scrollIntoView({ block: 'start' }); scrollBy(0, -76); });
   $('#countries').addEventListener('click', e => { const b = e.target.closest('.pill-b'); if (!b) return; filters.country = b.dataset.c; filters.brand = filters.model = filters.gen = ''; filters.page = 1; document.querySelectorAll('.pill-b').forEach(x => x.classList.toggle('on', x === b)); $('#h').textContent = heading(); loadCars(); });
   $('#cond').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; filters.cond = b.dataset.v; filters.page = 1; document.querySelectorAll('#cond button').forEach(x => x.classList.toggle('on', x === b)); loadCars(); });
-  $('#reset').addEventListener('click', () => { Object.assign(filters, { gen: '', brand: '', model: '', fuel: '', cond: '', ins: '', priceMin: '', priceMax: '', yearMin: '', yearMax: '', kmMax: '', volMin: '', volMax: '', ccMin: '', ccMax: '', q: '', page: 1 }); renderCars(); });
+  $('#reset').addEventListener('click', () => { Object.assign(filters, BLANK, { cond: '', page: 1 }); renderCars(); });
   const seg = $('#view-seg'), markSeg = () => seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === filters.mode));
   markSeg();
   seg.addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.dataset.m === filters.mode) return; filters.mode = b.dataset.m; filters.page = 1; markSeg(); loadCars(); });
@@ -99,16 +148,30 @@ function renderCars() {
 }
 
 function drawControls(f) {
-  const set = (w, id, label, empty, dis, opts, val, search, pick) => { $(w).innerHTML = ddHtml(id, label, empty, dis); $(`#${id}`).addEventListener('click', e => openDropdown(e.currentTarget, { options: opts, value: val, search, onPick: pick })); };
+  const pick = (k, v) => { filters[k] = v; filters.page = 1; loadCars(); };
+  const set = (w, id, label, empty, dis, opts, val, search, onPick, multi) => { $(w).innerHTML = ddHtml(id, label, empty, dis); $(`#${id}`).addEventListener('click', e => openDropdown(e.currentTarget, { options: opts, value: val, search, onPick, multi })); };
+  const simple = (w, k, name, opts, all) => { const now = opts.find(o => o.value === filters[k]); set(w, `dd-${k}`, now ? now.label : name, !now, false, [{ value: '', label: all }, ...opts], filters[k], false, v => pick(k, v)); };
   const ofn = (arr, all) => [{ value: '', label: all }, ...arr.map(x => ({ value: x.v, label: x.v, n: x.n }))];
   const cnt = (arr, v) => { const x = arr.find(a => a.v === v); return x ? `${v} (${fmt(x.n)})` : v; };
   set('#w-brand', 'dd-brand', filters.brand ? cnt(f.brands, filters.brand) : 'Марка', !filters.brand, false, ofn(f.brands, 'Все марки'), filters.brand, true, v => { filters.brand = v; filters.model = filters.gen = ''; filters.page = 1; loadCars(); });
   set('#w-model', 'dd-model', filters.model ? cnt(f.models, filters.model) : 'Модель', !filters.model, !filters.brand, ofn(f.models, 'Все модели'), filters.model, true, v => { filters.model = v; filters.gen = ''; filters.page = 1; loadCars(); });
   const gens = f.gens || [], genNow = gens.find(g => g.v === filters.gen);
-  set('#w-gen', 'dd-gen', genNow ? `${genNow.label} (${fmt(genNow.n)})` : 'Поколение', !genNow, !filters.model || !gens.length, [{ value: '', label: 'Все поколения' }, ...gens.map(g => ({ value: g.v, label: g.label, n: g.n }))], filters.gen, gens.length > 8, v => { filters.gen = v; filters.page = 1; loadCars(); });
-  set('#w-fuel', 'dd-fuel', FUEL[filters.fuel] || 'Топливо', !filters.fuel, false, [{ value: '', label: 'Любое' }, ...Object.entries(FUEL).map(([value, label]) => ({ value, label }))], filters.fuel, false, v => { filters.fuel = v; filters.page = 1; loadCars(); });
-  const INS = [{ value: '', label: 'Любое состояние' }, { value: 'clean', label: 'Без страховых' }, { value: 'dirty', label: 'Со страховыми' }];
-  set('#w-ins', 'dd-ins', filters.ins ? INS.find(x => x.value === filters.ins).label : 'Состояние', !filters.ins, false, INS, filters.ins, false, v => { filters.ins = v; filters.page = 1; loadCars(); });
+  $('#w-gen').innerHTML = ddHtml('dd-gen', genNow ? `${genNow.years}${genNow.codes ? `, ${genNow.codes}` : ''}` : 'Поколение', !genNow, !filters.model || !gens.length);
+  $('#dd-gen').addEventListener('click', e => openGenPicker(e.currentTarget, gens, v => pick('gen', v)));
+  simple('#w-gear', 'gear', 'КПП', GEAR_OPTIONS, 'Любая КПП');
+  simple('#w-fuel', 'fuel', 'Топливо', Object.entries(FUEL).filter(([k]) => k !== 'series').map(([value, label]) => ({ value, label })), 'Любое топливо');
+  simple('#w-drive', 'drive', 'Привод', DRIVE_OPTIONS, 'Любой привод');
+  const vol = cc => `${(Math.round(cc / 100) / 10).toFixed(1)} л`;
+  const volOpts = (all, edge) => [{ value: '', label: all }, ...VOLUMES.map(v => ({ value: String(Math.round(v * 1000) + edge), label: `${v.toFixed(1)} л` }))];
+  set('#w-ccmin', 'dd-ccmin', filters.ccMin ? `от ${vol(filters.ccMin)}` : 'Объём от', !filters.ccMin, false, volOpts('Любой', -50), String(filters.ccMin), false, v => pick('ccMin', v));
+  set('#w-ccmax', 'dd-ccmax', filters.ccMax ? `до ${vol(filters.ccMax)}` : 'до', !filters.ccMax, false, volOpts('Любой', 49), String(filters.ccMax), false, v => pick('ccMax', v));
+  const bodies = filters.body.split(',').filter(Boolean);
+  $('#w-body').innerHTML = ddHtml('dd-body', bodies.length ? bodies.map(b => BODIES[b]).join(', ') : 'Тип кузова', !bodies.length, false);
+  $('#dd-body').addEventListener('click', e => openBodyPicker(e.currentTarget, v => { filters.body = v; filters.page = 1; loadCars(); }));
+  simple('#w-steer', 'steer', 'Руль', STEER_OPTIONS, 'Любой руль');
+  simple('#w-dmg', 'dmg', 'Состояние', DAMAGE_OPTIONS, 'Любое состояние');
+  const origins = filters.origin.split(',').filter(Boolean);
+  set('#w-origin', 'dd-origin', origins.length ? origins.map(o => ORIGIN_OPTIONS.find(x => x.value === o)?.label).join(', ') : 'Страна марки', !origins.length, false, [{ value: '', label: 'Любая' }, ...ORIGIN_OPTIONS], filters.origin, false, v => { filters.origin = v; filters.page = 1; loadCars(); }, true);
   set('#w-sort', 'dd-sort', SORT.find(s => s.value === filters.sort).label, false, false, SORT, filters.sort, false, v => { filters.sort = v; filters.page = 1; loadCars(); });
 }
 
@@ -148,7 +211,7 @@ function bindPager(res) {
 }
 
 const yearsText = (a, b) => (!a ? '' : a === b ? String(a) : `${a}–${b}`);
-const rangeHtml = o => `<span class="range">${o.from === o.to ? money(o.from) : `<small>от</small>${money(o.from)}`}</span>${o.from === o.to ? '' : `<span class="orig">до ${money(o.to)}</span>`}<span class="turn">${o.kind === 'turnkey' ? (o.country === 'kg' ? 'под ключ, Москва' : 'под ключ, Владивосток') : 'цена площадки'}</span>`;
+const rangeHtml = o => `<span class="range">${o.from === o.to ? money(o.from) : `<small>от</small>${money(o.from)}`}</span>${o.from === o.to ? '' : `<span class="orig">до ${money(o.to)}</span>`}<span class="turn">${o.kind === 'turnkey' ? (o.country === 'kg' ? 'под ключ, Москва' : 'под ключ, Владивосток') : esc(IN_COUNTRY[o.country] || '')}</span>`;
 function drawOffers(d, f) {
   drawControls(f);
   const label = `${fmt(d.total)} ${word(d.total, 'модель', 'модели', 'моделей')}`;
@@ -214,10 +277,10 @@ function rowHtml(c) {
   const grade = c.grade ? `<span class="tag ${['5', '6', 'S', '4.5'].includes(c.grade) ? 'down' : ''}">Оценка ${esc(c.grade)}</span>` : '';
   const sanc = c.country === 'jp' ? (isSanctioned(c) ? '<span class="tag up">Санкционный</span>' : isMildHybrid(c) ? '<span class="tag">Мягкий гибрид</span>' : '') : '';
   const kind = c.price_kind === 'start' ? '<span class="tag">Старт торгов</span>' : c.price_kind === 'average' ? '<span class="tag">Средняя цена</span>' : '';
-  const ins = c.insurance === 0 ? '<span class="tag down">Без страховых</span>' : c.insurance > 0 ? `<span class="tag up">Страховых случаев: ${c.insurance}</span>` : '';
+  const ins = c.damage === 0 ? '<span class="tag down">Без повреждений</span>' : c.damage === 1 ? `<span class="tag up">С повреждениями${c.insurance > 0 ? `: ${c.insurance}` : ''}</span>` : '';
   return `<button class="row" data-id="${esc(c.id)}"><span class="ph ${c.photo ? '' : 'none'}">${c.photo ? `<img loading="lazy" referrerpolicy="no-referrer" src="${safe(c.photo_local || c.photo)}" alt="">` : ''}${modelPhotoNote(c)}</span>
   <span class="r-main"><span class="r-title">${esc(carName(c))}</span>${c.trim ? `<span class="r-trim">${esc(c.trim)}</span>` : ''}<span class="r-spec">${esc(specLine(c))}</span>${moved || spec || ins || grade ? `<span class="tags">${grade}${sanc}${kind}${ins}${moved}${spec}</span>` : ''}</span>
-  <span class="r-side"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${c.country === 'kg' ? 'Москва' : 'Владивосток'}` : 'цена площадки'}</span><span class="orig">${money(c.price, c.currency)}</span><span class="where">${esc(meta.countries[c.country])}${c.city ? `, ${esc(c.city)}` : ''}<br>${esc(src?.name)}</span></span></button>`;
+  <span class="r-side"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${c.country === 'kg' ? 'Москва' : 'Владивосток'}` : esc(IN_COUNTRY[c.country] || '')}</span><span class="orig">${money(c.price, c.currency)}</span><span class="where">${esc(meta.countries[c.country])}${c.city ? `, ${esc(c.city)}` : ''}<br>${esc(src?.name)}</span></span></button>`;
 }
 function pagerHtml(d) {
   const pages = Math.max(1, Math.ceil(d.total / d.size)), p = d.page, nums = [];
@@ -231,25 +294,42 @@ function creditHtml(c) {
   try { const x = JSON.parse(c.photo_credit); return `<a class="credit" target="_blank" rel="noopener noreferrer" href="${safe(x.url)}">Фото: ${esc(x.text)}</a>`; } catch { return ''; }
 }
 
-const NOTE = { start: 'только старт торгов', specs: 'нужна мощность или объём', pickup: 'пикап: расчёт по TKS', delivery: 'нужна доставка из ОАЭ', price: 'нет цены' };
+const NOTE = { start: 'только старт торгов', pickup: 'пикап: расчёт по TKS', delivery: 'цена в Эмиратах, без доставки', price: 'нет цены' };
 function costHtml(c) {
   if (!c.breakdown) return '';
   let b; try { b = JSON.parse(c.breakdown); } catch { return ''; }
   if (b.lines) {
     const row = l => `<div class="line ${l.strong ? 'strong' : ''}"><span>${esc(l.label)}</span><span>${money(l.value, l.cur)}</span></div>`, t = b.customs || {};
     const cu = [['Пошлина', t.duty], ['Таможенное оформление', t.fee], ['Утильсбор', t.util], ['Акциз', t.excise], ['НДС', t.vat]].filter(([, v]) => v > 0).map(([label, value]) => row({ label, value, cur: 'RUB' })).join('');
-    return `<div class="sub">Из чего цена</div>${b.route ? row({ label: 'Маршрут', value: null }).replace('—', esc(b.route)) : ''}${b.lines.map(row).join('')}<div class="sub">Таможня</div>${cu}<div class="line strong"><span>Под ключ</span><span>${money(c.turnkey)}</span></div>`;
+    const hpLine = b.hpEst ? `<div class="line"><span>Мощность для расчёта, по типовому двигателю. Сверьте с объявлением</span><span>≈ ${fmt(b.hp)} л.с.</span></div>` : '';
+    return `<div class="sub">Из чего цена</div>${hpLine}${b.route ? row({ label: 'Маршрут', value: null }).replace('—', esc(b.route)) : ''}${b.lines.map(row).join('')}<div class="sub">Таможня</div>${cu}<div class="line strong"><span>Под ключ</span><span>${money(c.turnkey)}</span></div>`;
   }
   const line = (k, v) => `<div class="line"><span>${k}</span><span>${money(v)}</span></div>`;
   return `<div class="sub">Из чего цена</div>${line('Автомобиль', c.price * (b.rate || 0))}${line('Доставка до Москвы', b.delivery)}${line('Расходы', b.expenses_usd * (b.rate || 0))}${line('Утильсбор', b.util)}${line('Брокер', b.broker)}${line('Комиссия компании', b.commission)}<div class="line strong"><span>Под ключ</span><span>${money(c.turnkey)}</span></div>`;
 }
 
+const photosOf = c => { const p = Array.isArray(c.photos) ? c.photos : (() => { try { return JSON.parse(c.photos || '[]'); } catch { return []; } })(); const main = c.photo_local || c.photo; return [...new Set([...(p.length ? [] : [main]), ...p].filter(Boolean))]; };
+function galleryHtml(c) {
+  const ph = photosOf(c);
+  if (!ph.length) return `<span class="ph none">${modelPhotoNote(c)}</span>`;
+  return `<div class="gal" data-i="0"><span class="ph"><img referrerpolicy="no-referrer" src="${safe(ph[0])}" alt="">${modelPhotoNote(c)}${ph.length > 1 ? `<button type="button" class="gal-nav prev" aria-label="Назад">‹</button><button type="button" class="gal-nav next" aria-label="Дальше">›</button><span class="gal-n">1 / ${ph.length}</span>` : ''}</span>${ph.length > 1 ? `<div class="thumbs">${ph.map((u, i) => `<button type="button" class="thumb ${i ? '' : 'on'}" data-i="${i}"><img loading="lazy" referrerpolicy="no-referrer" src="${safe(u)}" alt=""></button>`).join('')}</div>` : ''}</div>`;
+}
+function bindGallery(root) {
+  const g = $('.gal', root);
+  if (!g) return;
+  const thumbs = [...g.querySelectorAll('.thumb')], main = $('.ph img', g), n = Math.max(1, thumbs.length);
+  const show = i => { i = (i + n) % n; g.dataset.i = i; if (thumbs[i]) main.src = $('img', thumbs[i]).src; thumbs.forEach((t, k) => t.classList.toggle('on', k === i)); const c = $('.gal-n', g); if (c) c.textContent = `${i + 1} / ${n}`; };
+  g.addEventListener('click', e => { const t = e.target.closest('.thumb'), nav = e.target.closest('.gal-nav'); if (t) show(+t.dataset.i); else if (nav) show(+g.dataset.i + (nav.classList.contains('next') ? 1 : -1)); });
+  main.addEventListener('error', () => { if (!thumbs.length) { main.parentElement.classList.add('none'); main.remove(); } });
+  thumbs.forEach(t => $('img', t).addEventListener('error', () => t.remove()));
+}
+
 function openCar(c, onBack) {
   const src = meta.sources.find(s => s.id === c.source);
-  const rows = [['Страна', meta.countries[c.country]], ['Год', c.year], ['Регистрация', c.reg], ['Пробег', c.mileage != null ? `${fmt(c.mileage)} км` : null], ['Двигатель', c.volume_cc ? `${(c.volume_cc / 1000).toFixed(1)} л` : null], ['Мощность', c.hp ? `${c.hp} л.с.` : null], ['Оценка', c.grade], ['Маршрут', c.country === 'jp' ? (isSanctioned(c) ? 'Япония, Корея, РФ' : 'Япония, РФ') : null], ['Кузов', c.chassis], ['КПП', c.gearbox], ['Аукцион', c.auction], ['Дата торгов', c.auction_date], ['Топливо', FUEL[c.fuel]], ['Привод', c.drive], ['Цвет', c.color], ['Страховые случаи', c.insurance == null ? null : c.insurance === 0 ? 'нет' : c.insurance], ['Сумма выплат', c.insurance_sum ? `${fmt(c.insurance_sum)} $` : null], ['Спецификация', c.spec && /Specs/.test(c.spec) ? c.spec : null], ['Город', c.auction ? null : c.city], ['Источник', src?.name]].filter(([, v]) => v);
+  const rows = [['Страна', meta.countries[c.country]], ['Год', c.year], ['Регистрация', c.reg], ['Пробег', c.mileage != null ? `${fmt(c.mileage)} км` : null], ['Двигатель', c.volume_cc ? `${(c.volume_cc / 1000).toFixed(1)} л` : null], ['Мощность', c.hp ? `${c.hp} л.с.` : c.hp_est ? `≈ ${c.hp_est} л.с., оценка` : null], ['Оценка', c.grade], ['Маршрут', c.country === 'jp' ? (isSanctioned(c) ? 'Япония, Корея, РФ' : 'Япония, РФ') : null], ['Тип кузова', BODIES[c.body]], ['Номер кузова', c.chassis], ['КПП', GEAR[c.gear] || c.gearbox], ['Руль', STEER[c.steer]], ['Аукцион', c.auction], ['Дата торгов', c.auction_date], ['Топливо', FUEL[c.fuel]], ['Привод', c.drive], ['Цвет', c.color], ['Состояние', c.damage == null ? null : c.damage ? 'с повреждениями' : 'без повреждений'], ['Страховые случаи', c.insurance == null ? null : c.insurance === 0 ? 'нет' : c.insurance], ['Сумма выплат', c.insurance_sum ? `${fmt(c.insurance_sum)} $` : null], ['Спецификация', c.spec && /Specs/.test(c.spec) ? c.spec : null], ['Город', c.auction ? null : c.city], ['Источник', src?.name]].filter(([, v]) => v);
   layer.innerHTML = `<div class="modal-back"><div class="modal" role="dialog" aria-modal="true"><div class="m-head"><div class="m-title">${onBack ? '<button class="back" aria-label="Назад">‹</button>' : ''}<div><h2>${esc(carName(c))}</h2>${c.trim ? `<p>${esc(c.trim)}</p>` : ''}</div></div><button class="x" aria-label="Закрыть">×</button></div>
-  <div class="m-body"><div><span class="ph ${c.photo ? '' : 'none'}">${c.photo ? `<img referrerpolicy="no-referrer" src="${safe(c.photo_local || c.photo)}" alt="">` : ''}${modelPhotoNote(c)}</span>${creditHtml(c)}</div>
-  <div><div class="m-price"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${c.country === 'kg' ? 'Москва' : 'Владивосток'}` : esc(NOTE[c.turnkey_note] || 'цена площадки')}</span><span class="orig">${money(c.price, c.currency)}</span></div>
+  <div class="m-body"><div>${galleryHtml(c)}${creditHtml(c)}</div>
+  <div><div class="m-price"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${c.country === 'kg' ? 'Москва' : 'Владивосток'}` : esc(NOTE[c.turnkey_note] || IN_COUNTRY[c.country] || '')}</span><span class="orig">${money(c.price, c.currency)}</span></div>
   <div class="m-act">${c.country === 'kg' ? '' : '<button class="btn main" id="to-calc">Открыть в калькуляторе</button>'}${c.url ? `<a class="btn ${c.country === 'kg' ? 'main' : 'sec'}" target="_blank" rel="noopener noreferrer" href="${safe(c.url)}">${c.country === 'kg' ? 'Видео' : 'Открыть объявление'}</a>` : ''}</div>
   <dl class="spec">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>${c.options ? `<div class="opts">${esc(c.options)}</div>` : ''}${costHtml(c)}</div></div></div></div>`;
   const close = () => { layer.innerHTML = ''; document.body.style.overflow = ''; removeEventListener('keydown', onKey); };
@@ -258,7 +338,7 @@ function openCar(c, onBack) {
   $('.x', layer).addEventListener('click', close);
   $('.back', layer)?.addEventListener('click', () => { removeEventListener('keydown', onKey); onBack(); });
   $('.modal-back', layer).addEventListener('mousedown', e => { if (e.target === e.currentTarget) close(); });
-  $('img', layer)?.addEventListener('error', e => { e.target.parentElement.classList.add('none'); e.target.remove(); });
+  bindGallery(layer);
   $('#to-calc')?.addEventListener('click', () => { fillCalc(c); close(); location.hash = 'calc'; });
 }
 
@@ -330,32 +410,12 @@ function drawCalc() {
   <div class="sub">${esc(r.extraTitle || 'Дополнительно')}</div><div class="lines">${r.extra.map(line).join('')}</div>`;
 }
 
-/* Обновления */
-const TYPES = { '': 'Все', added: 'Новые', price: 'Цена', removed: 'Снятые', returned: 'Вернулись' };
-const chState = { type: '', page: 1 };
-const STATUS = { done: ['Готово', 'ok'], running: ['Идёт', 'warn'], blocked: ['Нужна проверка', 'bad'], login: ['Нужен вход', 'bad'], error: ['Ошибка', 'bad'], aborted: ['Прервано', 'warn'] };
-function renderUpdates() {
-  view.innerHTML = `<h1>Обновления</h1><div class="src-grid">${meta.sources.map(s => { const [t, c] = s.last ? STATUS[s.last.status] : ['Нет данных', '']; return `<div class="src"><b>${esc(s.name)}</b><div class="n">${fmt(s.listings)}</div><span class="badge ${c}">${t}</span>${s.last?.finished ? `<small>${new Date(s.last.finished).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</small>` : ''}</div>`; }).join('')}</div>
-  <div class="cond" id="ch-t" style="padding:0 0 8px">${Object.entries(TYPES).map(([k, v]) => `<button class="${chState.type === k ? 'on' : ''}" data-t="${k}">${v}</button>`).join('')}</div><div id="ch-list"><div class="sk sk-row"></div></div>`;
-  $('#ch-t').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; chState.type = b.dataset.t; chState.page = 1; document.querySelectorAll('#ch-t button').forEach(x => x.classList.toggle('on', x === b)); loadChanges(); });
-  loadChanges();
-}
-async function loadChanges() {
-  const d = await api(`/api/changes?type=${chState.type}&page=${chState.page}`), el = $('#ch-list');
-  if (!el) return;
-  if (!d.items.length) { el.innerHTML = '<div class="box empty">Изменений нет</div>'; return; }
-  const pages = Math.ceil(d.total / d.size);
-  el.innerHTML = `<div class="feed">${d.items.map(c => `<div class="ch"><span class="k"><span class="badge ${c.type === 'removed' ? 'bad' : c.type === 'added' ? 'ok' : 'warn'}">${TYPES[c.type]}</span></span><span><div class="t">${esc(c.title)}</div><div class="d">${esc(meta.countries[c.country])} · ${new Date(c.at).toLocaleDateString('ru-RU')}</div></span><span class="p">${c.type === 'price' ? `${money(c.old_price, c.currency)} → ${money(c.new_price, c.currency)}` : money(c.new_price ?? c.old_price, c.currency)}</span></div>`).join('')}</div>
-  ${pages > 1 ? `<div class="pager"><div class="nums"><button class="pg" data-p="${d.page - 1}" ${d.page <= 1 ? 'disabled' : ''}>‹</button><span class="pg-m" style="display:inline">${d.page} из ${pages}</span><button class="pg" data-p="${d.page + 1}" ${d.page >= pages ? 'disabled' : ''}>›</button></div></div>` : ''}`;
-  $('.pager', el)?.addEventListener('click', e => { const b = e.target.closest('button'); if (b && !b.disabled) { chState.page = +b.dataset.p; loadChanges(); scrollTo({ top: 0 }); } });
-}
-
 /* Навигация */
 function route() {
   closeDropdown();
   const v = location.hash.slice(1) || 'cars';
   document.querySelectorAll('#tabs a').forEach(a => a.classList.toggle('on', a.dataset.view === v));
-  ({ cars: renderCars, calc: renderCalc, updates: renderUpdates }[v] || renderCars)();
+  ({ cars: renderCars, calc: renderCalc }[v] || renderCars)();
   scrollTo({ top: 0 });
 }
 async function boot() {
