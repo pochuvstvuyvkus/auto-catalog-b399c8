@@ -2,7 +2,6 @@
 const WORDS = { first: 1, second: 2, third: 3, fourth: 4, fifth: 5, sixth: 6, seventh: 7, eighth: 8, ninth: 9 };
 export const BANDS = [{ key: 'a', label: 'до 30 000 км', max: 30000 }, { key: 'b', label: '30–60 000 км', max: 60000 }, { key: 'c', label: 'от 60 000 км', max: Infinity }];
 const FUEL = { petrol: 'бензин', diesel: 'дизель', hybrid: 'гибрид', series: 'гибрид', electric: 'электро', lpg: 'газ' };
-const median = a => { const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
 
 export function generationOf(c) {
   if (c.gen_key) return { key: c.gen_key, label: c.gen_label };
@@ -23,10 +22,10 @@ const engineName = c => [c.volume_cc ? `${(c.volume_cc / 1000).toFixed(1)} л` :
 const hasNuance = c => c.insurance > 0;
 export const offerKey = c => [c.country, c.brand, c.model, generationOf(c).key].join('|');
 
-// Вилка: от средней цены до самой высокой. Машины со страховыми случаями считаются отдельно.
+// Вилка: от самой низкой цены до самой высокой (24.11 Василина). Машины со страховыми случаями считаются отдельно.
 function range(list) {
   const clean = list.filter(c => !hasNuance(c)), base = clean.length ? clean : list, tk = base.filter(c => c.turnkey), use = tk.length ? tk.map(c => c.turnkey) : base.map(c => c.rub);
-  return { from: median(use), to: Math.max(...use), kind: tk.length ? 'turnkey' : 'site', priced: tk.length };
+  return { from: Math.min(...use), to: Math.max(...use), kind: tk.length ? 'turnkey' : 'site', priced: tk.length };
 }
 function nuance(list) {
   const n = list.filter(hasNuance);

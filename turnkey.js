@@ -57,6 +57,13 @@ export function turnkeyFor(c, { company, cbr }, now = new Date()) {
 
 // Свыше 160 л.с. в каталоге только премиум-сегмент: под ключ от 5 млн ₽. Пикапы остаются.
 export const isHiddenByPower = (c, turnkey, hp = c.hp) => c.country !== 'kg' && hp > 160 && !isPickup(c) && !(turnkey >= THRESHOLD);
+// Лот японского аукциона после дня торгов уже продан или снят: в каталоге его не показываем.
+export function isPastAuction(c, now = new Date()) {
+  const m = String(c.auction_date || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!m) return false;
+  const tokyo = new Date(now.getTime() + 9 * 3600e3).toISOString().slice(0, 10);
+  return `${m[3]}-${m[2]}-${m[1]}` < tokyo;
+}
 // Эмираты: только новые машины без пробега.
 export const isHiddenUae = c => c.country === 'ae' && c.mileage != null && c.mileage > 100;
 
@@ -74,14 +81,14 @@ export function recomputeTurnkey(db) {
   const cbr = Object.fromEntries(rates.map(r => [r.code, r.value / r.nominal]));
   if (!cbr.EUR || !eff.KRW) return null;
   const company = { USD: eff.USD, CNY: eff.CNY, JPY: eff.JPY, KRW: eff.KRW };
-  const rows = db.prepare(`SELECT id,country,brand,model,title,trim,year,reg,mileage,fuel,volume_cc,hp,body,price,currency,price_kind,chassis FROM listings WHERE active=1 AND source<>'kyrgyz'`).all();
+  const rows = db.prepare(`SELECT id,country,brand,model,title,trim,year,reg,mileage,fuel,volume_cc,hp,body,price,currency,price_kind,chassis,auction_date FROM listings WHERE active=1 AND source<>'kyrgyz'`).all();
   const up = db.prepare('UPDATE listings SET turnkey=?, breakdown=?, turnkey_note=?, hidden=?, hp_est=? WHERE id=?'), stat = { ok: 0, hidden: 0 };
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const c of rows) {
       const x = turnkeyFor(c, { company, cbr });
       if (x.turnkey) stat.ok++; else stat[x.note] = (stat[x.note] || 0) + 1;
-      const hide = c.price_kind === 'start' || isHiddenChina(c) || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
+      const hide = c.price_kind === 'start' || isPastAuction(c) || isHiddenChina(c) || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
       stat.hidden += hide;
       up.run(x.turnkey ?? null, x.breakdown ? JSON.stringify(x.breakdown) : null, x.note ?? null, hide, x.hpEst ?? null, c.id);
     }
