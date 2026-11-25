@@ -276,7 +276,7 @@ function rowHtml(c) {
   const spec = c.spec && /Specs/.test(c.spec) ? `<span class="tag">${esc(c.spec)}</span>` : '';
   const grade = c.grade ? `<span class="tag ${['5', '6', 'S', '4.5'].includes(c.grade) ? 'down' : ''}">Оценка ${esc(c.grade)}</span>` : '';
   const sanc = c.country === 'jp' ? (isSanctioned(c) ? '<span class="tag up">Санкционный</span>' : isMildHybrid(c) ? '<span class="tag">Мягкий гибрид</span>' : '') : '';
-  const kind = c.price_kind === 'start' ? '<span class="tag">Старт торгов</span>' : c.price_kind === 'average' ? '<span class="tag">Средняя цена</span>' : '';
+  const kind = c.price_kind === 'start' ? '<span class="tag">Старт торгов</span>' : c.price_kind === 'average' ? '<span class="tag">Средняя цена</span>' : c.price_kind === 'sold' ? `<span class="tag">Продан ${esc(String(c.auction_date || '').slice(0, 5))}</span>` : '';
   const ins = c.damage === 0 ? '<span class="tag down">Без повреждений</span>' : c.damage === 1 ? `<span class="tag up">С повреждениями${c.insurance > 0 ? `: ${c.insurance}` : ''}</span>` : '';
   return `<button class="row" data-id="${esc(c.id)}"><span class="ph ${c.photo ? '' : 'none'}">${c.photo ? `<img loading="lazy" referrerpolicy="no-referrer" src="${safe(c.photo_local || c.photo)}" alt="">` : ''}${modelPhotoNote(c)}</span>
   <span class="r-main"><span class="r-title">${esc(carName(c))}</span>${c.trim ? `<span class="r-trim">${esc(c.trim)}</span>` : ''}<span class="r-spec">${esc(specLine(c))}</span>${moved || spec || ins || grade ? `<span class="tags">${grade}${sanc}${kind}${ins}${moved}${spec}</span>` : ''}</span>

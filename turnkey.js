@@ -58,6 +58,16 @@ export function turnkeyFor(c, { company, cbr }, now = new Date()) {
 // Свыше 160 л.с. в каталоге только премиум-сегмент: под ключ от 5 млн ₽. Пикапы остаются.
 export const isHiddenByPower = (c, turnkey, hp = c.hp) => c.country !== 'kg' && hp > 160 && !isPickup(c) && !(turnkey >= THRESHOLD);
 // Лот японского аукциона после дня торгов уже продан или снят: в каталоге его не показываем.
+// Проданные лоты остаются в каталоге как статистика: реальная цена продажи за последние SOLD_DAYS дней.
+export const SOLD_DAYS = 30;
+const tokyoDay = (now, back = 0) => new Date(now.getTime() + 9 * 3600e3 - back * 86400e3).toISOString().slice(0, 10);
+const isoOf = d => { const m = String(d || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
+export function isHiddenJapanLot(c, now = new Date()) {
+  if (c.country !== 'jp') return false;
+  const d = isoOf(c.auction_date);
+  if (c.price_kind === 'sold') return Boolean(d) && d < tokyoDay(now, SOLD_DAYS);
+  return isPastAuction(c, now);
+}
 export function isPastAuction(c, now = new Date()) {
   const m = String(c.auction_date || '').match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
   if (!m) return false;
@@ -88,7 +98,7 @@ export function recomputeTurnkey(db) {
     for (const c of rows) {
       const x = turnkeyFor(c, { company, cbr });
       if (x.turnkey) stat.ok++; else stat[x.note] = (stat[x.note] || 0) + 1;
-      const hide = c.price_kind === 'start' || isPastAuction(c) || isHiddenChina(c) || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
+      const hide = c.price_kind === 'start' || isHiddenJapanLot(c) || isHiddenChina(c) || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
       stat.hidden += hide;
       up.run(x.turnkey ?? null, x.breakdown ? JSON.stringify(x.breakdown) : null, x.note ?? null, hide, x.hpEst ?? null, c.id);
     }
