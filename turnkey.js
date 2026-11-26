@@ -87,19 +87,29 @@ export function isHiddenChina(c, now = new Date()) {
   return (now.getFullYear() - +m[1]) * 12 + now.getMonth() + 1 - +m[2] < 6;
 }
 
+// Китай: объявление дешевле 60% медианной цены той же марки, модели и года — нереальная цена (просила Василина 26.11). Сравниваем, если таких объявлений от трёх.
+export const CHEAP_SHARE = 0.6;
+export function chinaMedians(rows) {
+  const g = new Map();
+  for (const c of rows) if (c.country === 'cn' && c.price > 0) { const k = `${c.brand}|${c.model}|${c.year}`; (g.get(k) || g.set(k, []).get(k)).push(c.price); }
+  return new Map([...g].filter(([, a]) => a.length >= 3).map(([k, a]) => { const s = a.sort((x, y) => x - y); return [k, s[Math.floor(s.length / 2)]]; }));
+}
+export const isCheapChina = (c, medians) => c.country === 'cn' && c.price > 0 && c.price < CHEAP_SHARE * (medians.get(`${c.brand}|${c.model}|${c.year}`) || 0);
+
 export function recomputeTurnkey(db) {
   const rates = db.prepare('SELECT * FROM rates').all(), eff = Object.fromEntries(db.prepare('SELECT * FROM effective').all().map(r => [r.key, r.per_unit]));
   const cbr = Object.fromEntries(rates.map(r => [r.code, r.value / r.nominal]));
   if (!cbr.EUR || !eff.KRW) return null;
   const company = { USD: eff.USD, CNY: eff.CNY, JPY: eff.JPY, KRW: eff.KRW };
   const rows = db.prepare(`SELECT id,country,brand,model,title,trim,year,reg,mileage,fuel,volume_cc,hp,body,price,currency,price_kind,chassis,auction_date FROM listings WHERE active=1 AND source<>'kyrgyz'`).all();
-  const up = db.prepare('UPDATE listings SET turnkey=?, breakdown=?, turnkey_note=?, hidden=?, hp_est=? WHERE id=?'), stat = { ok: 0, hidden: 0 };
+  const up = db.prepare('UPDATE listings SET turnkey=?, breakdown=?, turnkey_note=?, hidden=?, hp_est=? WHERE id=?'), stat = { ok: 0, hidden: 0, cheap: 0 }, medians = chinaMedians(rows);
   db.exec('BEGIN IMMEDIATE');
   try {
     for (const c of rows) {
       const x = turnkeyFor(c, { company, cbr });
       if (x.turnkey) stat.ok++; else stat[x.note] = (stat[x.note] || 0) + 1;
-      const hide = c.price_kind === 'start' || isHiddenJapanLot(c) || isHiddenChina(c) || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
+      const cheap = isCheapChina(c, medians); stat.cheap += cheap;
+      const hide = c.price_kind === 'start' || isHiddenJapanLot(c) || isHiddenChina(c) || cheap || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
       stat.hidden += hide;
       up.run(x.turnkey ?? null, x.breakdown ? JSON.stringify(x.breakdown) : null, x.note ?? null, hide, x.hpEst ?? null, c.id);
     }
