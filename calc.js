@@ -11,7 +11,7 @@ export const SCHEMES = [
   { id: 'jp', country: 'jp', name: 'Япония', cur: 'JPY', price: 3473000, abroad: 215000, docs: 90000, docsLabel: DOCS_PRR, bankInfo: 0.015, bankBase: 'all', bankName: 'АТБ', city: 'Владивосток' },
   { id: 'jp_s_low', country: 'jp', name: 'Япония, санкционные, до 2 млн ¥', route: 'Япония, Корея, РФ', cur: 'JPY', price: 1900000, abroad: 880000, docs: 90000, docsLabel: DOCS_PRR, rateMarkup: 0.03, city: 'Владивосток' },
   { id: 'jp_s_high', country: 'jp', name: 'Япония, санкционные, от 2 млн ¥', route: 'Япония, Корея, РФ', cur: 'JPY', price: 16040000, abroad: p => 680000 + p * 0.1, docs: 90000, docsLabel: DOCS_PRR, rateMarkup: 0.03, city: 'Владивосток' },
-  { id: 'ae', country: 'ae', name: 'ОАЭ', cur: 'USD', price: 23900, uae: true, broker: 200000, docs: 350000, commission: 100000, transferFee: 0.02, city: 'Москва' },
+  { id: 'ae', country: 'ae', name: 'ОАЭ', cur: 'USD', price: 13500, uae: true, abroad: 2900, docs: 190000, docsLabel: 'ЭПТС, СБКТС, ПРР, услуги брокера, СВХ, временная регистрация', rf: 150000, commission: 60000, transferFee: 0.02, city: 'Астрахань' },
 ];
 
 export const PAY_MARKUPS = [
@@ -32,7 +32,7 @@ export function compute(id, input) {
   const baseRate = n(input.rate);
   const customs = n(input.customs);
   const commission = n(input.commission, s.commission ?? 60000);
-  if (s.uae) return computeUae(s, { price, rate: baseRate, customs, commission, broker: n(input.broker, s.broker), docs: n(input.docs, s.docs), deposit: n(input.deposit, 100000), booking: n(input.booking, 240000) });
+  if (s.uae) return computeUae(s, { price, rate: baseRate, customs, commission, abroad: n(input.abroad, s.abroad), rf: n(input.rf, s.rf), docs: n(input.docs, s.docs) });
 
   const markup = s.payMarkup ? (PAY_MARKUPS.find(m => m.id === input.payMarkup)?.value ?? 0) : 0;
   const rate = baseRate * (1 + markup) * (1 + (s.rateMarkup ?? 0));
@@ -64,34 +64,26 @@ export function compute(id, input) {
   return { total, rate, lines, extra, route: s.route || null, totalLabel: `Итоговая цена, ${s.city}` };
 }
 
+// Лист «ОАЭ» таблицы калькуляторов (правка Василины 26.11): цена авто и расходы до Астрахани в долларах, комиссия за перевод 2% включена.
 function computeUae(s, v) {
-  const rub = v.price * v.rate;
-  const fee = rub * s.transferFee;
-  const shipped = rub + fee;
-  const russia = v.customs + v.broker + v.docs + v.commission;
-  const total = shipped + russia;
-  const expenses = russia - v.customs - v.deposit - v.booking;
+  const usd = v.price + v.abroad, rub = usd * v.rate, fee = rub * s.transferFee, shipped = rub + fee;
+  const russia = v.customs + v.docs + v.rf + v.commission, total = shipped + russia;
   return {
     total, rate: v.rate, totalLabel: `Итоговая цена, ${s.city}`,
     lines: [
-      { label: 'Автомобиль с доставкой до Астрахани', value: v.price, cur: 'USD' },
+      { label: 'Автомобиль', value: v.price, cur: 'USD' },
+      { label: 'Расходы до Астрахани: комиссия дилера, логистика по ОАЭ и страхование, экспортные документы, лицензия, логистика ОАЭ–РФ, учёт, стоянка', value: v.abroad, cur: 'USD' },
+      { label: 'Итого', value: usd, cur: 'USD', strong: true },
       { label: 'Итого в рублях', value: rub, cur: 'RUB' },
       { label: `Комиссия за перевод ${pct(s.transferFee)}`, value: fee, cur: 'RUB' },
       { label: 'Автомобиль с отправкой', value: shipped, cur: 'RUB', strong: true },
-      { label: 'Таможенные сборы', value: v.customs, cur: 'RUB' },
-      { label: 'Услуги брокера, лаборатория', value: v.broker, cur: 'RUB' },
-      { label: 'ЭПТС, СБКТС', value: v.docs, cur: 'RUB' },
+      { label: 'Таможенные платежи', value: v.customs, cur: 'RUB' },
+      { label: s.docsLabel, value: v.docs, cur: 'RUB' },
+      { label: 'Расходы в РФ: портовые, ПРР, документация, повторный осмотр', value: v.rf, cur: 'RUB' },
       { label: 'Комиссия компании', value: v.commission, cur: 'RUB' },
       { label: 'Итого в России', value: russia, cur: 'RUB', strong: true },
     ],
-    extra: [
-      { label: '1. Депозит', value: v.deposit, cur: 'RUB' },
-      { label: '2. Бронь авто', value: v.booking, cur: 'RUB' },
-      { label: '3. Оплата расходов', value: expenses, cur: 'RUB' },
-      { label: '4. Авто с отправкой', value: shipped, cur: 'RUB' },
-      { label: '5. Таможенные платежи', value: v.customs, cur: 'RUB' },
-    ],
-    extraTitle: 'Порядок оплаты',
+    extra: [{ label: 'Вклад в детский спорт', value: v.commission * 0.2, cur: 'RUB' }],
   };
 }
 

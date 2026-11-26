@@ -23,9 +23,10 @@ const filters = { mode: 'models', country: '', cond: '', ...BLANK, sort: 'new', 
 const BODIES = { sedan: 'Седан', hatch5: 'Хэтчбек 5 дв.', hatch3: 'Хэтчбек 3 дв.', liftback: 'Лифтбек', suv5: 'Джип 5 дв.', suv3: 'Джип 3 дв.', wagon: 'Универсал', minivan: 'Минивэн', pickup: 'Пикап', coupe: 'Купе', cabrio: 'Открытый' };
 const STEER = { left: 'Левый', right: 'Правый' };
 const GEAR = { at: 'АКПП', robot: 'Робот', cvt: 'Вариатор', mt: 'Механика' };
+const CITY = { kg: 'Москва', ae: 'Астрахань' };
 const IN_COUNTRY = { cn: 'цена в Китае, без доставки и таможни', kr: 'цена в Корее, без доставки и таможни', jp: 'цена на аукционе, без доставки', ae: 'цена в Эмиратах, без доставки', kg: 'цена в Киргизии' };
 // Пустой калькулятор ничего не подставляет: менеджер вводит всё сам или открывает машину из каталога.
-const calcState = { id: '', price: null, rate: null, abroad: null, year: null, cc: null, hp: null, fuel: '', body: 'car', customs: null, docs: null, commission: null, logistics: null, payMarkup: 'none', customsTouched: false, commissionTouched: false, title: '' };
+const calcState = { id: '', price: null, rate: null, abroad: null, year: null, cc: null, hp: null, fuel: '', body: 'car', customs: null, docs: null, rf: null, commission: null, logistics: null, payMarkup: 'none', customsTouched: false, commissionTouched: false, title: '' };
 
 /* Всплывающие списки */
 function openPop(btn, { width = 220, cls = '', html, bind }) {
@@ -211,7 +212,7 @@ function bindPager(res) {
 }
 
 const yearsText = (a, b) => (!a ? '' : a === b ? String(a) : `${a}–${b}`);
-const rangeHtml = o => `<span class="range">${o.from === o.to ? money(o.from) : `<small>от</small>${money(o.from)}`}</span>${o.from === o.to ? '' : `<span class="orig">до ${money(o.to)}</span>`}<span class="turn">${o.kind === 'turnkey' ? (o.country === 'kg' ? 'под ключ, Москва' : 'под ключ, Владивосток') : esc(IN_COUNTRY[o.country] || '')}</span>`;
+const rangeHtml = o => `<span class="range">${o.from === o.to ? money(o.from) : `<small>от</small>${money(o.from)}`}</span>${o.from === o.to ? '' : `<span class="orig">до ${money(o.to)}</span>`}<span class="turn">${o.kind === 'turnkey' ? `под ключ, ${CITY[o.country] || 'Владивосток'}` : esc(IN_COUNTRY[o.country] || '')}</span>`;
 function drawOffers(d, f) {
   drawControls(f);
   const label = `${fmt(d.total)} ${word(d.total, 'модель', 'модели', 'моделей')}`;
@@ -280,7 +281,7 @@ function rowHtml(c) {
   const ins = c.damage === 0 ? '<span class="tag down">Без повреждений</span>' : c.damage === 1 ? `<span class="tag up">С повреждениями${c.insurance > 0 ? `: ${c.insurance}` : ''}</span>` : '';
   return `<button class="row" data-id="${esc(c.id)}"><span class="ph ${c.photo ? '' : 'none'}">${c.photo ? `<img loading="lazy" referrerpolicy="no-referrer" src="${safe(c.photo_local || c.photo)}" alt="">` : ''}${modelPhotoNote(c)}</span>
   <span class="r-main"><span class="r-title">${esc(carName(c))}</span>${c.trim ? `<span class="r-trim">${esc(c.trim)}</span>` : ''}<span class="r-spec">${esc(specLine(c))}</span>${moved || spec || ins || grade ? `<span class="tags">${grade}${sanc}${kind}${ins}${moved}${spec}</span>` : ''}</span>
-  <span class="r-side"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${c.country === 'kg' ? 'Москва' : 'Владивосток'}` : esc(IN_COUNTRY[c.country] || '')}</span><span class="orig">${money(c.price, c.currency)}</span><span class="where">${esc(meta.countries[c.country])}${c.city ? `, ${esc(c.city)}` : ''}<br>${esc(src?.name)}</span></span></button>`;
+  <span class="r-side"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${CITY[c.country] || 'Владивосток'}` : esc(IN_COUNTRY[c.country] || '')}</span><span class="orig">${money(c.price, c.currency)}</span><span class="where">${esc(meta.countries[c.country])}${c.city ? `, ${esc(c.city)}` : ''}<br>${esc(src?.name)}</span></span></button>`;
 }
 function pagerHtml(d) {
   const pages = Math.max(1, Math.ceil(d.total / d.size)), p = d.page, nums = [];
@@ -329,7 +330,7 @@ function openCar(c, onBack) {
   const rows = [['Страна', meta.countries[c.country]], ['Год', c.year], ['Регистрация', c.reg], ['Пробег', c.mileage != null ? `${fmt(c.mileage)} км` : null], ['Двигатель', c.volume_cc ? `${(c.volume_cc / 1000).toFixed(1)} л` : null], ['Мощность', c.hp && c.country === 'ae' ? `≈ ${c.hp} л.с., по каталогу Дрома` : c.hp ? `${c.hp} л.с.` : c.hp_est ? `≈ ${c.hp_est} л.с., оценка` : null], ['Оценка', c.grade], ['Маршрут', c.country === 'jp' ? (isSanctioned(c) ? 'Япония, Корея, РФ' : 'Япония, РФ') : null], ['Тип кузова', BODIES[c.body]], ['Номер кузова', c.chassis], ['КПП', GEAR[c.gear] || c.gearbox], ['Руль', STEER[c.steer]], ['Аукцион', c.auction], ['Дата торгов', c.auction_date], ['Топливо', FUEL[c.fuel]], ['Привод', c.drive], ['Цвет', c.color], ['Состояние', c.damage == null ? null : c.damage ? 'с повреждениями' : 'без повреждений'], ['Страховые случаи', c.insurance == null ? null : c.insurance === 0 ? 'нет' : c.insurance], ['Сумма выплат', c.insurance_sum ? `${fmt(c.insurance_sum)} $` : null], ['Спецификация', c.spec && /Specs/.test(c.spec) ? c.spec : null], ['Город', c.auction ? null : c.city], ['Источник', src?.name]].filter(([, v]) => v);
   layer.innerHTML = `<div class="modal-back"><div class="modal" role="dialog" aria-modal="true"><div class="m-head"><div class="m-title">${onBack ? '<button class="back" aria-label="Назад">‹</button>' : ''}<div><h2>${esc(carName(c))}</h2>${c.trim ? `<p>${esc(c.trim)}</p>` : ''}</div></div><button class="x" aria-label="Закрыть">×</button></div>
   <div class="m-body"><div>${galleryHtml(c)}${creditHtml(c)}</div>
-  <div><div class="m-price"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${c.country === 'kg' ? 'Москва' : 'Владивосток'}` : esc(NOTE[c.turnkey_note] || IN_COUNTRY[c.country] || '')}</span><span class="orig">${money(c.price, c.currency)}</span></div>
+  <div><div class="m-price"><span class="rub">${money(c.rub)}</span><span class="turn">${c.turnkey ? `под ключ, ${CITY[c.country] || 'Владивосток'}` : esc(NOTE[c.turnkey_note] || IN_COUNTRY[c.country] || '')}</span><span class="orig">${money(c.price, c.currency)}</span></div>
   <div class="m-act">${c.country === 'kg' ? '' : '<button class="btn main" id="to-calc">Открыть в калькуляторе</button>'}${c.url ? `<a class="btn ${c.country === 'kg' ? 'main' : 'sec'}" target="_blank" rel="noopener noreferrer" href="${safe(c.url)}">${c.country === 'kg' ? 'Видео' : 'Открыть объявление'}</a>` : ''}</div>
   <dl class="spec">${rows.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl>${c.options ? `<div class="opts">${esc(c.options)}</div>` : ''}${costHtml(c)}</div></div></div></div>`;
   const close = () => { layer.innerHTML = ''; document.body.style.overflow = ''; removeEventListener('keydown', onKey); };
@@ -350,7 +351,7 @@ function fillCalc(c) {
   const carPrice = c.currency === s.cur ? c.price : c.price * meta.rates[c.currency].cbr / meta.rates[s.cur].cbr;
   Object.assign(calcState, { id, price: Math.round(carPrice), rate: null, abroad: null, year: c.year || null, cc: c.volume_cc ?? null, hp: c.hp ?? null, fuel: saved.engine || c.fuel || (/\b\d{3}d\b|\bdiesel\b|\bTDI\b|\bCDI\b|\bXD\b/i.test(c.trim || '') ? 'diesel' : 'petrol'), body: c.body === 'pickup' || c.turnkey_note === 'pickup' ? 'pickup' : 'car', customs: null, docs: null, commission: null, logistics: null, customsTouched: false, commissionTouched: false, title: c.title });
 }
-function schemeReset(id) { Object.assign(calcState, { id, price: null, rate: null, abroad: null, customs: null, docs: null, commission: null, logistics: null, customsTouched: false, commissionTouched: false, payMarkup: 'none', title: '' }); }
+function schemeReset(id) { Object.assign(calcState, { id, price: null, rate: null, abroad: null, customs: null, docs: null, rf: null, commission: null, logistics: null, customsTouched: false, commissionTouched: false, payMarkup: 'none', title: '' }); }
 const REASONS = { pickup: 'Пикап', specs: 'Нужны объём и мощность', price: 'Нужна цена', input: 'Нужны год и топливо' };
 
 function renderCalc() {
@@ -367,7 +368,7 @@ function renderCalc() {
       <div class="field full"><span>Направление</span>${ddHtml('dd-scheme', s.name)}</div>
       ${st.title ? `<div class="field full"><span>Автомобиль</span><div class="car-name">${esc(st.title)}</div></div>` : ''}
       ${field('price', `Цена авто, ${SYM[s.cur]}`)}${field('rate', `Курс ${s.cur} → ₽`, fmt(unitRate(s.cur), 4))}
-      ${s.uae ? '' : field('abroad', `Расходы в стране, ${SYM[s.cur]}`, fmt(defaultAbroad(s, st.price || 0)))}
+      ${field('abroad', s.uae ? 'Расходы до Астрахани, $' : `Расходы в стране, ${SYM[s.cur]}`, fmt(defaultAbroad(s, st.price || 0)))}
       ${s.payMarkup ? `<div class="field"><span>Оплата</span>${ddHtml('dd-pay', PAY_MARKUPS.find(m => m.id === st.payMarkup).label)}</div>` : ''}
       <div class="sep">Таможня</div>
       <div class="field full"><span>Кузов</span><div class="seg" data-seg="body"><button type="button" data-v="car">Легковой</button><button type="button" data-v="pickup">Пикап</button></div></div>
@@ -376,7 +377,7 @@ function renderCalc() {
       ${field('customs', 'Таможенные платежи, ₽')}<div class="field" id="c-note"></div>
       <div class="links"><a class="btn sec" target="_blank" rel="noopener noreferrer" href="https://calcus.ru/rastamozhka-auto">Calcus</a><a class="btn sec" target="_blank" rel="noopener noreferrer" href="https://www.tks.ru/auto/calc/">TKS, пикап</a></div>
       <div class="sep">Расходы в России</div>
-      ${s.uae ? field('broker', 'Брокер, лаборатория, ₽', fmt(s.broker)) : ''}${field('docs', s.uae ? 'ЭПТС, СБКТС, ₽' : 'ЭПТС, СБКТС, брокер, СВХ, ₽', fmt(s.docs))}
+      ${field('docs', s.uae ? 'ЭПТС, СБКТС, ПРР, брокер, СВХ, ₽' : 'ЭПТС, СБКТС, брокер, СВХ, ₽', fmt(s.docs))}${s.uae ? field('rf', 'Расходы в РФ: порт, ПРР, осмотр, ₽', fmt(s.rf)) : ''}
       ${s.logistics ? field('logistics', 'Логистика до Москвы, ₽', '0') : ''}${field('commission', 'Комиссия компании, ₽')}
     </div></section><section class="box result" id="c-out"></section></div>`;
   $('#dd-scheme').addEventListener('click', e => openDropdown(e.currentTarget, { options: SCHEMES.map(x => ({ value: x.id, label: x.name })), value: st.id, onPick: v => { schemeReset(v); renderCalc(); } }));
@@ -402,13 +403,13 @@ function drawCalc() {
   const custInput = $('[data-k=customs]');
   if (!st.customsTouched) { st.customs = auto.ok ? Math.round(auto.total) : null; if (document.activeElement !== custInput) custInput.value = st.customs == null ? '' : st.customs; }
   $('#c-note').innerHTML = auto.ok ? `<span>Расчёт</span><div class="state"><span class="badge ok">${auto.util <= 5200 ? 'Льготный утильсбор' : 'По ставкам 2026'}</span></div>` : `<span>Расчёт</span><div class="state"><span class="badge warn">${esc(REASONS[auto.reason])}: вручную</span></div>`;
-  const ruleBase = { price: st.price || 0, rate, abroad: st.abroad ?? undefined, customs: st.customs ?? 0, docs: st.docs ?? undefined, logistics: st.logistics ?? 0, broker: st.broker ?? undefined, payMarkup: st.payMarkup };
+  const ruleBase = { price: st.price || 0, rate, abroad: st.abroad ?? undefined, customs: st.customs ?? 0, docs: st.docs ?? undefined, logistics: st.logistics ?? 0, rf: st.rf ?? undefined, payMarkup: st.payMarkup };
   const commission = st.commissionTouched ? st.commission : (s.commission ?? commissionFor(compute(st.id, { ...ruleBase, commission: 60000 }).total));
   const commInput = $('[data-k=commission]');
   if (!st.commissionTouched) commInput.placeholder = fmt(commission);
   const missing = !(st.price > 0) ? 'Введите цену авто' : !(rate > 0) ? 'Введите курс' : st.customs == null ? 'Заполните год, топливо, объём и мощность или таможенные платежи' : '';
   if (missing) { out.innerHTML = `<h3>Расчёт</h3><div class="empty">${missing}</div>`; return; }
-  const r = compute(st.id, { price: st.price, rate, abroad: st.abroad ?? undefined, customs: st.customs, docs: st.docs ?? undefined, commission, logistics: st.logistics ?? 0, broker: st.broker ?? undefined, payMarkup: st.payMarkup });
+  const r = compute(st.id, { price: st.price, rate, abroad: st.abroad ?? undefined, customs: st.customs, docs: st.docs ?? undefined, commission, logistics: st.logistics ?? 0, rf: st.rf ?? undefined, payMarkup: st.payMarkup });
   const line = l => `<div class="line ${l.strong ? 'strong' : ''}"><span>${esc(l.label)}</span><span>${money(l.value, l.cur)}</span></div>`;
   out.innerHTML = `<div class="total"><span>${esc(r.totalLabel)}</span><b>${money(r.total)}</b></div>${r.route ? `<div class="line"><span>Маршрут</span><span>${esc(r.route)}</span></div>` : ''}<div class="lines">${r.lines.map(line).join('')}</div>
   ${auto.ok && !st.customsTouched ? `<div class="sub">Таможня</div><div class="lines">${line({ label: 'Пошлина', value: auto.duty, cur: 'RUB' })}${line({ label: 'Таможенное оформление', value: auto.fee, cur: 'RUB' })}${line({ label: 'Утильсбор', value: auto.util, cur: 'RUB' })}${auto.excise ? line({ label: 'Акциз', value: auto.excise, cur: 'RUB' }) : ''}${auto.vat ? line({ label: 'НДС', value: auto.vat, cur: 'RUB' }) : ''}</div>` : ''}

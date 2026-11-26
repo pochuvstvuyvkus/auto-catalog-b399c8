@@ -17,6 +17,7 @@ function target(c, cbr) {
   if (c.country === 'jp') return c.price_kind === 'start' ? { note: 'start' } : { id: japanScheme({ ...c, fuel: engineType(c) === 'petrol' ? c.fuel : engineType(c) === 'series' ? 'hybrid' : engineType(c) }), price: c.price };
   if (c.country === 'kr') return { id: 'kr', price: c.currency === 'USD' ? c.price * (cbr.USD / cbr.KRW) : c.price };
   if (c.country === 'cn') return { id: 'cn', price: c.price };
+  if (c.country === 'ae') return c.currency === 'AED' && cbr.AED && cbr.USD ? { id: 'ae', price: c.price * cbr.AED / cbr.USD } : { note: 'price' };
   return { note: 'delivery' };
 }
 
@@ -98,7 +99,7 @@ export function recomputeTurnkey(db) {
     for (const c of rows) {
       const x = turnkeyFor(c, { company, cbr });
       if (x.turnkey) stat.ok++; else stat[x.note] = (stat[x.note] || 0) + 1;
-      const hide = c.price_kind === 'start' || isHiddenJapanLot(c) || isHiddenChina(c) || isHiddenUae(c) || (x.note !== 'delivery' && isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null))) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины. Правило мощности ждёт цены под ключ (Эмираты без цены доставки не скрываем).
+      const hide = c.price_kind === 'start' || isHiddenJapanLot(c) || isHiddenChina(c) || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
       stat.hidden += hide;
       up.run(x.turnkey ?? null, x.breakdown ? JSON.stringify(x.breakdown) : null, x.note ?? null, hide, x.hpEst ?? null, c.id);
     }
