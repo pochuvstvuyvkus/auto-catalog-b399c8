@@ -40,20 +40,20 @@ export function typicalHp(c) {
 
 // rates: { company: {код: ₽ за единицу}, cbr: {код: ₽ за единицу} }
 export function turnkeyFor(c, { company, cbr }, now = new Date()) {
-  if (isPickup(c)) return { note: 'pickup' };
   const t = target(c, cbr);
   if (t.note) return { note: t.note };
   if (!c.year) return { note: 'specs' };
   const s = scheme(t.id), electric = ['electric', 'series'].includes(engineType(c));
-  if (!electric && !(c.volume_cc > 0)) return { note: 'specs' };
+  const pickup = isPickup(c);
+  if (!pickup && !electric && !(c.volume_cc > 0)) return { note: 'specs' };
   const hpEst = c.hp || c.country !== 'kr' ? null : typicalHp(c), hp = c.hp || hpEst; // Оценка только для Кореи: двигатели Hyundai и Kia по объёму почти однозначны. Китай ждёт мощность из карточки che168.
-  if (!hp && !electric) return { note: 'specs' };
-  const duty = customs({ priceRub: t.price * cbr[s.cur], eurRate: cbr.EUR, age: ageBand(c.year, now), cc: electric ? c.volume_cc || 0 : c.volume_cc, hp, fuel: engineType(c) });
+  if (!pickup && !hp && !electric) return { note: 'specs' };
+  const duty = customs({ priceRub: t.price * cbr[s.cur], eurRate: cbr.EUR, age: ageBand(c.year, now), cc: electric ? c.volume_cc || 0 : c.volume_cc, hp, fuel: engineType(c), body: pickup ? 'pickup' : 'car' });
   if (!duty.ok) return { note: duty.reason };
   const input = { price: t.price, rate: company[s.cur], customs: duty.total };
   let r = compute(t.id, { ...input, commission: COMMISSION });
   if (r.total >= THRESHOLD) r = compute(t.id, { ...input, commission: COMMISSION_HIGH });
-  return { turnkey: Math.round(r.total), hpEst, breakdown: { scheme: s.name, engine: engineType(c), route: r.route, hp, hpEst: !!hpEst, lines: r.lines, customs: { duty: duty.duty, fee: duty.fee, util: duty.util, excise: duty.excise, vat: duty.vat } } };
+  return { turnkey: Math.round(r.total), hpEst, breakdown: { scheme: s.name, engine: engineType(c), pickup, route: r.route, hp, hpEst: !!hpEst, lines: r.lines, customs: { duty: duty.duty, fee: duty.fee, util: duty.util, excise: duty.excise, vat: duty.vat } } };
 }
 
 // Свыше 160 л.с. в каталоге только премиум-сегмент: под ключ от 5 млн ₽. Пикапы остаются.

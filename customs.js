@@ -39,7 +39,7 @@ export function utilFee({ age, cc, hp, electric }) {
 // fuel: electric и series (последовательный гибрид) считаются как электромобиль.
 export function customs({ priceRub, eurRate, age, cc, hp, fuel, body }) {
   if (!(priceRub > 0) || !(eurRate > 0)) return { ok: false, reason: 'price' };
-  if (body === 'pickup') return { ok: false, reason: 'pickup' };
+  if (body === 'pickup') return pickupCustoms({ priceRub, age, fuel, cc });
   const electric = fuel === 'electric' || fuel === 'series';
   if (!(hp > 0) || (!electric && !(cc > 0))) return { ok: false, reason: 'specs' };
   const fee = clearanceFee(priceRub), util = utilFee({ age, cc, hp, electric });
@@ -49,6 +49,17 @@ export function customs({ priceRub, eurRate, age, cc, hp, fuel, body }) {
   }
   const d = duty({ priceEur: priceRub / eurRate, age, cc }) * eurRate;
   return { ok: true, duty: d, fee, util, excise: 0, vat: 0, total: d + fee + util };
+}
+
+// Пикап ввозится как грузовой N1 (полная масса 2,5–3,5 т): пошлина 10% дизель, 15% бензин и гибрид, без акциза, НДС 22% с цены и пошлины,
+// утильсбор 150 000 ₽ × 6,6 до 3 лет и × 9,61 старше (утилка.онлайн по постановлению № 1291, расчёты Дрома, 26.11.2026). Мощность и объём не нужны.
+// Кей-грузовики Японии (объём до 1 л) легче 2,5 т: 150 000 ₽ × 6,13 и × 8,91.
+export const PICKUP_UTIL = { under3: 990000, older: 1441500, lightUnder3: 919500, lightOlder: 1336500 };
+export function pickupCustoms({ priceRub, age, fuel, cc }) {
+  const light = cc > 0 && cc <= 1000, young = age === 'under3';
+  const d = priceRub * (fuel === 'diesel' ? 0.10 : 0.15), fee = clearanceFee(priceRub), vat = (priceRub + d) * VAT;
+  const util = light ? (young ? PICKUP_UTIL.lightUnder3 : PICKUP_UTIL.lightOlder) : young ? PICKUP_UTIL.under3 : PICKUP_UTIL.older;
+  return { ok: true, duty: d, fee, util, excise: 0, vat, total: d + fee + util + vat, pickup: true };
 }
 
 export function ageBand(year, now = new Date()) {

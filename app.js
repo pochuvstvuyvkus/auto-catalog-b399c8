@@ -402,7 +402,7 @@ function drawCalc() {
   const auto = !st.year || !st.fuel ? { ok: false, reason: 'input' } : customs({ priceRub: (st.price || 0) * (meta.rates[s.cur]?.cbr || rate), eurRate: unitRate('EUR'), age: ageBand(st.year), cc: st.cc, hp: st.hp, fuel: st.fuel, body: st.body });
   const custInput = $('[data-k=customs]');
   if (!st.customsTouched) { st.customs = auto.ok ? Math.round(auto.total) : null; if (document.activeElement !== custInput) custInput.value = st.customs == null ? '' : st.customs; }
-  $('#c-note').innerHTML = auto.ok ? `<span>Расчёт</span><div class="state"><span class="badge ok">${auto.util <= 5200 ? 'Льготный утильсбор' : 'По ставкам 2026'}</span></div>` : `<span>Расчёт</span><div class="state"><span class="badge warn">${esc(REASONS[auto.reason])}: вручную</span></div>`;
+  $('#c-note').innerHTML = auto.ok ? `<span>Расчёт</span><div class="state"><span class="badge ok">${auto.pickup ? 'Пикап как грузовой N1' : auto.util <= 5200 ? 'Льготный утильсбор' : 'По ставкам 2026'}</span></div>` : `<span>Расчёт</span><div class="state"><span class="badge warn">${esc(REASONS[auto.reason])}: вручную</span></div>`;
   const ruleBase = { price: st.price || 0, rate, abroad: st.abroad ?? undefined, customs: st.customs ?? 0, docs: st.docs ?? undefined, logistics: st.logistics ?? 0, rf: st.rf ?? undefined, payMarkup: st.payMarkup };
   const commission = st.commissionTouched ? st.commission : (s.commission ?? commissionFor(compute(st.id, { ...ruleBase, commission: 60000 }).total));
   const commInput = $('[data-k=commission]');
