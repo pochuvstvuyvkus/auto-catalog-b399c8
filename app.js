@@ -18,7 +18,7 @@ const FUEL = { petrol: 'Бензин', diesel: 'Дизель', hybrid: 'Гибр
 
 let meta = null;
 const cache = new Map();
-const BLANK = { gen: '', brand: '', model: '', fuel: '', priceMin: '', priceMax: '', yearMin: '', yearMax: '', kmMin: '', kmMax: '', ccMin: '', ccMax: '', gear: '', drive: '', steer: '', dmg: '', body: '', origin: '', q: '' };
+const BLANK = { gen: '', brand: '', model: '', fuel: '', priceMin: '', priceMax: '', yearMin: '', yearMax: '', kmMin: '', kmMax: '', ccMin: '', ccMax: '', hpMin: '', hpMax: '', gear: '', drive: '', steer: '', dmg: '', body: '', origin: '', q: '' };
 const filters = { mode: 'models', country: '', cond: '', ...BLANK, sort: 'new', page: 1, size: 50 };
 const BODIES = { sedan: 'Седан', hatch5: 'Хэтчбек 5 дв.', hatch3: 'Хэтчбек 3 дв.', liftback: 'Лифтбек', suv5: 'Джип 5 дв.', suv3: 'Джип 3 дв.', wagon: 'Универсал', minivan: 'Минивэн', pickup: 'Пикап', coupe: 'Купе', cabrio: 'Открытый' };
 const STEER = { left: 'Левый', right: 'Правый' };
@@ -128,12 +128,12 @@ function renderCars() {
     <div class="c2 pair"><input class="input" name="kmMin" inputmode="numeric" placeholder="Пробег от, км"><input class="input" name="kmMax" inputmode="numeric" placeholder="до"></div>
     <div class="c2" id="w-gear"></div><div class="c2" id="w-fuel"></div><div class="c2" id="w-drive"></div>
     <div class="c2 pair dd-pair"><div id="w-ccmin"></div><div id="w-ccmax"></div></div><div class="c2" id="w-body"></div><div class="c2" id="w-steer"></div>
-    <div class="c3" id="w-origin"></div><div class="c3"><input class="input" name="q" placeholder="Поиск"></div>
+    <div class="c2 pair"><input class="input" name="hpMin" inputmode="numeric" placeholder="Мощность от, л.с."><input class="input" name="hpMax" inputmode="numeric" placeholder="до"></div><div class="c2" id="w-origin"></div><div class="c2"><input class="input" name="q" placeholder="Поиск"></div>
     <div class="f-foot"><button type="button" class="reset" id="reset">× Сбросить все</button><button type="submit" class="btn main" id="show">Показать</button></div>
   </form>
   <div class="bar" id="bar"><div class="bar-l"><div class="count" id="count">&nbsp;</div><div class="view-seg" id="view-seg"><button type="button" data-m="models">Модели</button><button type="button" data-m="cars">Объявления</button></div></div><div class="sort" id="w-sort"></div></div>
   <div id="results"></div></div>${sideHtml()}</div>`;
-  for (const n of ['priceMin', 'priceMax', 'yearMin', 'yearMax', 'kmMin', 'kmMax', 'q']) {
+  for (const n of ['priceMin', 'priceMax', 'yearMin', 'yearMax', 'kmMin', 'kmMax', 'hpMin', 'hpMax', 'q']) {
     const i = $(`[name=${n}]`); i.value = filters[n];
     let t; i.addEventListener('input', () => { clearTimeout(t); t = setTimeout(() => { filters[n] = n === 'q' ? i.value : (parseNum(i.value) ?? ''); filters.page = 1; loadCars(); }, 280); });
   }
