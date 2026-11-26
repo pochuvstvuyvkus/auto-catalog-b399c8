@@ -98,7 +98,7 @@ export function recomputeTurnkey(db) {
     for (const c of rows) {
       const x = turnkeyFor(c, { company, cbr });
       if (x.turnkey) stat.ok++; else stat[x.note] = (stat[x.note] || 0) + 1;
-      const hide = c.price_kind === 'start' || isHiddenJapanLot(c) || isHiddenChina(c) || isHiddenUae(c) || isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null)) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины.
+      const hide = c.price_kind === 'start' || isHiddenJapanLot(c) || isHiddenChina(c) || isHiddenUae(c) || (x.note !== 'delivery' && isHiddenByPower(c, x.turnkey, c.hp || (x.hpEst >= 180 ? x.hpEst : null))) ? 1 : 0; // Лот со стартовой ценой показывать нечем: это не цена машины. Правило мощности ждёт цены под ключ (Эмираты без цены доставки не скрываем).
       stat.hidden += hide;
       up.run(x.turnkey ?? null, x.breakdown ? JSON.stringify(x.breakdown) : null, x.note ?? null, hide, x.hpEst ?? null, c.id);
     }
